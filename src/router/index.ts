@@ -1,0 +1,110 @@
+import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { useLocaleStore } from '@/stores/locale'
+
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean
+    permission?: string
+    title?: string
+    publicRoute?: boolean
+  }
+}
+
+const routes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/Login.vue'),
+    meta: { publicRoute: true, title: 'Login' }
+  },
+  {
+    path: '/',
+    component: () => import('@/layouts/DefaultLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        redirect: '/dashboard'
+      },
+      {
+        path: 'dashboard',
+        name: 'dashboard',
+        component: () => import('@/views/Dashboard.vue'),
+        meta: { requiresAuth: true, title: 'menu.dashboard' }
+      },
+      {
+        path: 'system/users',
+        name: 'users',
+        component: () => import('@/views/admin/Users.vue'),
+        meta: { requiresAuth: true, permission: 'user:read', title: 'menu.users' }
+      },
+      {
+        path: 'system/roles',
+        name: 'roles',
+        component: () => import('@/views/admin/Roles.vue'),
+        meta: { requiresAuth: true, permission: 'role:read', title: 'menu.roles' }
+      },
+      {
+        path: 'system/menus',
+        name: 'menus',
+        component: () => import('@/views/admin/Menus.vue'),
+        meta: { requiresAuth: true, permission: 'menu:read', title: 'menu.menus' }
+      },
+      {
+        path: 'system/permissions',
+        name: 'permissions',
+        component: () => import('@/views/admin/Permissions.vue'),
+        meta: { requiresAuth: true, permission: 'permission:read', title: 'menu.permissions' }
+      },
+      {
+        path: 'system/themes',
+        name: 'themes',
+        component: () => import('@/views/admin/Themes.vue'),
+        meta: { requiresAuth: true, permission: 'theme:manage', title: 'menu.themes' }
+      },
+      {
+        path: 'system/locales',
+        name: 'locales',
+        component: () => import('@/views/admin/Locales.vue'),
+        meta: { requiresAuth: true, permission: 'locale:manage', title: 'menu.locales' }
+      },
+      {
+        path: 'system/audit',
+        name: 'audit',
+        component: () => import('@/views/admin/Audit.vue'),
+        meta: { requiresAuth: true, permission: 'audit:read', title: 'menu.audit' }
+      }
+    ]
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    component: () => import('@/views/NotFound.vue'),
+    meta: { publicRoute: true }
+  }
+]
+
+export const router = createRouter({
+  history: createWebHashHistory(),
+  routes
+})
+
+router.beforeEach(async (to, _from, next) => {
+  const auth = useAuthStore()
+  if (to.meta.title) {
+    // best-effort: update document title
+  }
+  if (to.meta.publicRoute) return next()
+
+  if (!auth.isAuthenticated) {
+    return next({ name: 'login', query: { redirect: to.fullPath } })
+  }
+  if (to.meta.permission && !auth.hasPermission(to.meta.permission)) {
+    return next({ name: 'dashboard' })
+  }
+  // Ensure locale store has the active locale (themes + locales were fetched at login,
+  // but a refresh should re-hydrate).
+  const localeStore = useLocaleStore()
+  if (!localeStore.active) await localeStore.hydrate()
+  next()
+})

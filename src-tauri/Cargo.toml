@@ -1,0 +1,46 @@
+[package]
+name = "admin-suite"
+version = "0.1.0"
+description = "Admin suite: Tauri + Rust + Vue3 backend management system"
+authors = ["you"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "admin_suite_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+tauri = { version = "1.6", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled", "chrono"] }
+chrono = { version = "0.4", features = ["serde"] }
+argon2 = "0.5"
+thiserror = "1"
+anyhow = "1"
+log = "0.4"
+env_logger = "0.11"
+once_cell = "1.19"
+sha2 = "0.10"
+hex = "0.4"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+parking_lot = "0.12"
+walkdir = "2.5"
+rand = "0.8"
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+incremental = false
+opt-level = 3
+strip = true
