@@ -66,7 +66,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number) }}
           releaseName: 'Admin Suite ${{ github.ref_name }}'
           releaseBody: |
             Automated build via GitHub Actions.
@@ -80,7 +80,7 @@ jobs:
             Password: `admin123`
 
             > Change the password on first login.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
