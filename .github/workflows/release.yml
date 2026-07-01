@@ -1,0 +1,98 @@
+name: Release
+
+# Trigger builds on:
+#   - Push of a version tag (v*)         -> creates a draft GitHub Release with artifacts
+#   - Manual "Run workflow" from web UI  -> just uploads build artifacts (no release)
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required so tauri-action can create the GitHub Release
+  actions: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            args: ''
+          # Uncomment if you also want 32-bit installers:
+          # - target: i686-pc-windows-msvc
+          #   args: --target i686-pc-windows-msvc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Cache Cargo registry & build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install npm dependencies
+        run: npm ci
+        shell: pwsh
+
+      # -----------------------------------------------------------------------------
+      # The official Tauri action wraps the bundling, signs (if secrets present),
+      # creates a draft GitHub Release on tag pushes, and uploads artifacts.
+      # When triggered via workflow_dispatch (no tag), it falls back to uploading
+      # artifacts via the `tauri-action/upload-artifacts` output we list below.
+      # -----------------------------------------------------------------------------
+      - name: Build Tauri bundles (MSI + NSIS)
+        id: tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          releaseName: 'Admin Suite ${{ github.ref_name }}'
+          releaseBody: |
+            Automated build via GitHub Actions.
+
+            ## What's inside
+            - **MSI installer** (WiX) — preferred for system-wide install
+            - **NSIS installer (.exe)** — preferred for portable / per-user install
+
+            ## Default credentials
+            Username: `admin`
+            Password: `admin123`
+
+            > Change the password on first login.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      # On workflow_dispatch (no tag) the tauri-action has nothing to attach to.
+      # Upload artifacts manually so manual runs are still useful.
+      - name: Upload artifacts (manual run)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-suite-windows-${{ matrix.target }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,54 @@
+name: CI
+
+# Run on every push to main and every PR. Doesn't produce installers —
+# just verifies the code compiles and tests pass.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  rust:
+    name: cargo check + test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: cargo check
+        working-directory: src-tauri
+        run: cargo check --message-format=short
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test --lib
+
+  web:
+    name: vue-tsc + vite build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: vue-tsc
+        run: npx vue-tsc --noEmit
+
+      - name: vite build
+        run: npm run build
