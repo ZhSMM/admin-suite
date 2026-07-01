@@ -74,6 +74,24 @@ const routes: RouteRecordRaw[] = [
         name: 'audit',
         component: () => import('@/views/admin/Audit.vue'),
         meta: { requiresAuth: true, permission: 'audit:read', title: 'menu.audit' }
+      },
+      {
+        path: 'tools/base',
+        name: 'tool-base',
+        component: () => import('@/views/tools/BaseConvert.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.base.title' }
+      },
+      {
+        path: 'tools/json',
+        name: 'tool-json',
+        component: () => import('@/views/tools/JsonFormatter.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.json.title' }
+      },
+      {
+        path: 'tools/datetime',
+        name: 'tool-datetime',
+        component: () => import('@/views/tools/DateTime.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.datetime.title' }
       }
     ]
   },
