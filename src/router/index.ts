@@ -92,6 +92,42 @@ const routes: RouteRecordRaw[] = [
         name: 'tool-datetime',
         component: () => import('@/views/tools/DateTime.vue'),
         meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.datetime.title' }
+      },
+      {
+        path: 'tools/sql',
+        name: 'tool-sql',
+        component: () => import('@/views/tools/SqlFormatter.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.sql.title' }
+      },
+      {
+        path: 'tools/encode',
+        name: 'tool-encode',
+        component: () => import('@/views/tools/Encode.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.encode.title' }
+      },
+      {
+        path: 'tools/hash',
+        name: 'tool-hash',
+        component: () => import('@/views/tools/Hash.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.hash.title' }
+      },
+      {
+        path: 'tools/generate',
+        name: 'tool-generate',
+        component: () => import('@/views/tools/Generate.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.gen.title' }
+      },
+      {
+        path: 'tools/regex',
+        name: 'tool-regex',
+        component: () => import('@/views/tools/Regex.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.regex.title' }
+      },
+      {
+        path: 'tools/diff',
+        name: 'tool-diff',
+        component: () => import('@/views/tools/Diff.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.diff.title' }
       }
     ]
   },
