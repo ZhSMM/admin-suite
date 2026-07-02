@@ -16,9 +16,15 @@
       :default-expand-all="true"
       border
     >
-      <el-table-column :label="t('common.code')" prop="code" width="220" />
+      <el-table-column :label="t('common.code')" prop="code" width="180" />
       <el-table-column :label="t('common.name')" prop="title" width="160" />
-      <el-table-column :label="t('menus.columns.path')" prop="path" width="200" />
+      <el-table-column :label="t('menus.titleKey')" prop="title_key" width="200">
+        <template #default="{ row }">
+          <code v-if="row.title_key">{{ row.title_key }}</code>
+          <span v-else style="color: var(--text-secondary)">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('menus.columns.path')" prop="path" width="180" />
       <el-table-column :label="t('menus.columns.icon')" prop="icon" width="120" />
       <el-table-column :label="t('menus.columns.permission')" prop="permission_code" width="160" />
       <el-table-column :label="t('menus.columns.visible')" width="80">
@@ -51,6 +57,10 @@
         <el-form-item :label="t('common.name')">
           <el-input v-model="form.title" />
         </el-form-item>
+        <el-form-item :label="t('menus.titleKey')">
+          <el-input v-model="form.title_key" placeholder="menu.users" />
+          <small style="color: var(--text-secondary)">{{ t('menus.titleKeyHelp') }}</small>
+        </el-form-item>
         <el-form-item :label="t('menus.columns.path')">
           <el-input v-model="form.path" />
         </el-form-item>
@@ -65,8 +75,8 @@
         </el-form-item>
         <el-form-item :label="t('common.status')">
           <el-select v-model="form.status">
-            <el-option label="active" value="active" />
-            <el-option label="disabled" value="disabled" />
+            <el-option :label="t('users.statusActive')" value="active" />
+            <el-option :label="t('users.statusDisabled')" value="disabled" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('menus.columns.visible')">
@@ -116,6 +126,7 @@ const form = reactive<MenuCreate>({
   parent_id: null,
   code: '',
   title: '',
+  title_key: '',
   path: '',
   icon: '',
   component: '',
@@ -132,6 +143,7 @@ function openCreate(parentId?: string) {
   form.parent_id = parentId || null
   form.code = ''
   form.title = ''
+  form.title_key = ''
   form.path = ''
   form.icon = ''
   form.sort_order = 0
@@ -144,6 +156,7 @@ function openEdit(row: Menu) {
   dialog.id = row.id
   form.code = row.code
   form.title = row.title
+  form.title_key = row.title_key || ''
   form.path = row.path || ''
   form.icon = row.icon || ''
   form.sort_order = row.sort_order
@@ -162,10 +175,27 @@ async function onSave() {
   saving.value = true
   try {
     if (dialog.id) {
-      const payload: MenuUpdate = { id: dialog.id, title: form.title, path: form.path || null, icon: form.icon || null, sort_order: form.sort_order, visible: form.visible, status: form.status, permission_code: form.permission_code || null, parent_id: form.parent_id }
+      const payload: MenuUpdate = {
+        id: dialog.id,
+        title: form.title,
+        title_key: form.title_key || null,
+        path: form.path || null,
+        icon: form.icon || null,
+        sort_order: form.sort_order,
+        visible: form.visible,
+        status: form.status,
+        permission_code: form.permission_code || null,
+        parent_id: form.parent_id
+      }
       await menusApi.update(auth.token, payload)
     } else {
-      const payload: MenuCreate = { ...form, path: form.path || null, icon: form.icon || null, permission_code: form.permission_code || null }
+      const payload: MenuCreate = {
+        ...form,
+        path: form.path || null,
+        icon: form.icon || null,
+        title_key: form.title_key || null,
+        permission_code: form.permission_code || null
+      }
       await menusApi.create(auth.token, payload)
     }
     ElMessage.success(t('common.success'))

@@ -14,8 +14,8 @@
     <el-alert :title="t('themes.importHelp')" type="info" :closable="false" style="margin-bottom: 12px" />
 
     <el-table :data="items" v-loading="loading" border>
-      <el-table-column label="Code" prop="code" width="160" />
-      <el-table-column label="Name" prop="name" width="180" />
+      <el-table-column :label="t('locales.code')" prop="code" width="160" />
+      <el-table-column :label="t('locales.name')" prop="name" width="180" />
       <el-table-column :label="t('common.source')" width="120">
         <template #default="{ row }">
           <el-tag :type="row.source === 'builtin' ? 'info' : 'success'" size="small">

@@ -12,23 +12,24 @@ fn row_to_menu(r: &rusqlite::Row) -> rusqlite::Result<Menu> {
         parent_id: r.get(1)?,
         code: r.get(2)?,
         title: r.get(3)?,
-        path: r.get(4)?,
-        icon: r.get(5)?,
-        component: r.get(6)?,
-        sort_order: r.get(7)?,
-        visible: r.get::<_, i64>(8)? != 0,
-        status: r.get(9)?,
-        menu_type: r.get(10)?,
-        permission_code: r.get(11)?,
-        created_at: r.get(12)?,
-        updated_at: r.get(13)?,
+        title_key: r.get(4)?,
+        path: r.get(5)?,
+        icon: r.get(6)?,
+        component: r.get(7)?,
+        sort_order: r.get(8)?,
+        visible: r.get::<_, i64>(9)? != 0,
+        status: r.get(10)?,
+        menu_type: r.get(11)?,
+        permission_code: r.get(12)?,
+        created_at: r.get(13)?,
+        updated_at: r.get(14)?,
     })
 }
 
 fn select_all(db: &Db) -> AppResult<Vec<Menu>> {
     db.with_conn(|c| {
         let mut stmt = c.prepare(
-            "SELECT id, parent_id, code, title, path, icon, component, sort_order,
+            "SELECT id, parent_id, code, title, title_key, path, icon, component, sort_order,
                     visible, status, menu_type, permission_code, created_at, updated_at
              FROM menus ORDER BY sort_order, code",
         )?;
@@ -63,7 +64,7 @@ pub fn get(db: &Db, sessions: &SessionStore, token: &str, id: &str) -> AppResult
     require_permission(&user, "menu:read")?;
     db.with_conn(|c| {
         let mut stmt = c.prepare(
-            "SELECT id, parent_id, code, title, path, icon, component, sort_order,
+            "SELECT id, parent_id, code, title, title_key, path, icon, component, sort_order,
                     visible, status, menu_type, permission_code, created_at, updated_at
              FROM menus WHERE id = ?",
         )?;
@@ -91,15 +92,16 @@ pub fn create(
 
     db.with_conn(|c| {
         c.execute(
-            "INSERT INTO menus (id, parent_id, code, title, path, icon, component,
+            "INSERT INTO menus (id, parent_id, code, title, title_key, path, icon, component,
                                 sort_order, visible, status, menu_type, permission_code,
                                 created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 id,
                 payload.parent_id,
                 payload.code,
                 payload.title,
+                payload.title_key,
                 payload.path,
                 payload.icon,
                 payload.component,
@@ -133,6 +135,10 @@ pub fn update(
 
         if let Some(v) = &payload.title {
             sets.push("title = ?".into());
+            binds.push(Box::new(v.clone()));
+        }
+        if let Some(v) = &payload.title_key {
+            sets.push("title_key = ?".into());
             binds.push(Box::new(v.clone()));
         }
         if let Some(v) = &payload.path {

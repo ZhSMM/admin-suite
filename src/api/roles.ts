@@ -62,6 +62,7 @@ export interface Menu {
   parent_id: string | null
   code: string
   title: string
+  title_key: string | null
   path: string | null
   icon: string | null
   component: string | null
@@ -79,6 +80,7 @@ export interface MenuNode {
   parent_id: string | null
   code: string
   title: string
+  title_key: string | null
   path: string | null
   icon: string | null
   component: string | null
@@ -96,6 +98,7 @@ export interface MenuCreate {
   parent_id?: string | null
   code: string
   title: string
+  title_key?: string | null
   path?: string | null
   icon?: string | null
   component?: string | null
@@ -109,6 +112,7 @@ export interface MenuCreate {
 export interface MenuUpdate {
   id: string
   title?: string
+  title_key?: string | null
   path?: string | null
   icon?: string | null
   component?: string | null

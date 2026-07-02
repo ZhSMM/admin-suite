@@ -24,10 +24,13 @@ export default {
   'common.copySuccess': 'Copied',
   'common.copyFailed': 'Copy failed',
 
+  'app.name': 'Admin Suite',
+
   'auth.login': 'Login',
   'auth.logout': 'Logout',
   'auth.username': 'Username',
   'auth.password': 'Password',
+  'auth.passwordRequired': 'Password is required',
   'auth.loginSuccess': 'Login successful',
   'auth.invalidCredentials': 'Invalid username or password',
   'auth.welcomeBack': 'Welcome back',
@@ -42,6 +45,15 @@ export default {
   'menu.locales': 'Languages',
   'menu.audit': 'Audit Log',
   'menu.tools': 'Tools',
+  'menu.tools.base': 'Base Converter',
+  'menu.tools.json': 'JSON Formatter',
+  'menu.tools.datetime': 'Date & Time',
+  'menu.tools.sql': 'SQL Formatter',
+  'menu.tools.encode': 'URL / HTML',
+  'menu.tools.hash': 'Hash Calculator',
+  'menu.tools.generate': 'UUID & Password',
+  'menu.tools.regex': 'Regex Tester',
+  'menu.tools.diff': 'Diff',
 
   'tools.base.title': 'Base Converter',
   'tools.base.modeNumber': 'Number',
@@ -192,6 +204,11 @@ export default {
   'users.columns.lastLogin': 'Last login',
   'users.password': 'Password',
   'users.passwordHelp': 'Leave blank to keep current',
+  'users.statusActive': 'Active',
+  'users.statusDisabled': 'Disabled',
+  'users.validation.usernameRequired': 'Username is required',
+  'users.validation.displayNameRequired': 'Display name is required',
+  'users.validation.passwordTooShort': 'Password must be at least 6 characters',
 
   'roles.title': 'Role Management',
   'roles.create': 'New role',
@@ -204,6 +221,8 @@ export default {
 
   'menus.title': 'Menu Management',
   'menus.create': 'New menu',
+  'menus.titleKey': 'Title (i18n key)',
+  'menus.titleKeyHelp': 'Optional. Looked up via t() so locale switching works.',
   'menus.columns.path': 'Path',
   'menus.columns.icon': 'Icon',
   'menus.columns.permission': 'Permission',
@@ -220,6 +239,21 @@ export default {
 
   'locales.title': 'Language Management',
   'locales.import': 'Import language pack',
+  'locales.export': 'Export',
+  'locales.exportOne': 'Export',
+  'locales.exportDialog': 'Export language pack',
+  'locales.exportSource': 'Source locale',
+  'locales.exportTargetCode': 'Target code',
+  'locales.exportTargetLabel': 'Target label',
+  'locales.exportTargetLabelPlaceholder': 'e.g. 日本語',
+  'locales.exportFillEmpty': 'Fill missing keys',
+  'locales.exportFillEmptyHelp': 'When on, the export includes every key the app knows about, with empty strings for translations you still need to fill in.',
+  'locales.download': 'Download',
+  'locales.preview': 'Preview',
+  'locales.code': 'Code',
+  'locales.name': 'Name',
+  'locales.messages': 'Messages',
+  'locales.noLocale': 'No locale available to export',
   'locales.importHelp':
     'Drop a JSON file with the shape { "id": "xx-YY", "label": "Name", "messages": { "common.ok": "OK", ... } }.',
 
@@ -227,5 +261,8 @@ export default {
   'audit.columns.action': 'Action',
   'audit.columns.actor': 'Actor',
   'audit.columns.target': 'Target',
-  'audit.columns.time': 'Time'
+  'audit.columns.resource': 'Resource',
+  'audit.columns.payload': 'Payload',
+  'audit.columns.time': 'Time',
+  'audit.actionFilter': 'Filter by action'
 }

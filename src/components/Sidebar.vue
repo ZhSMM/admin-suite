@@ -1,7 +1,7 @@
 <template>
   <div class="sidebar-wrap">
     <div class="sidebar-logo">
-      <span v-if="!collapsed">Admin Suite</span>
+      <span v-if="!collapsed">{{ t('app.name') }}</span>
       <span v-else>AS</span>
     </div>
     <el-menu
@@ -23,6 +23,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useMenuStore } from '@/stores/menu'
 import { useAuthStore } from '@/stores/auth'
 import SidebarItem from './SidebarItem.vue'
@@ -33,6 +34,7 @@ const props = defineProps<{ collapsed: boolean }>()
 const route = useRoute()
 const menuStore = useMenuStore()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 // Top-level menus the user can see, optionally filtered by permission.
 const topMenus = computed<MenuNode[]>(() => {

@@ -75,8 +75,8 @@ const form = reactive({
   password: 'admin123'
 })
 const rules: FormRules = {
-  username: [{ required: true, message: () => 'username required', trigger: 'blur' }],
-  password: [{ required: true, message: () => 'password required', trigger: 'blur' }]
+  username: [{ required: true, message: () => t('users.validation.usernameRequired'), trigger: 'blur' }],
+  password: [{ required: true, message: () => t('auth.passwordRequired'), trigger: 'blur' }]
 }
 
 async function onSubmit() {

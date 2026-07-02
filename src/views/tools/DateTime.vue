@@ -176,8 +176,9 @@ function parseDate(d: Date): {
   const week = String(Math.ceil(((tmp.getTime() - yearStart.getTime()) / 86400000 + 1) / 7))
   const start = new Date(d.getFullYear(), 0, 0)
   const dayOfYear = String(Math.floor((d.getTime() - start.getTime()) / 86400000))
-  const leap = ((d.getFullYear() % 4 === 0 && d.getFullYear() % 100 !== 0) || d.getFullYear() % 400 === 0) ? 'yes' : 'no'
-  const daysInYear = leap === 'yes' ? '366' : '365'
+  const isLeap = (d.getFullYear() % 4 === 0 && d.getFullYear() % 100 !== 0) || d.getFullYear() % 400 === 0
+  const leap = isLeap ? t('common.yes') : t('common.no')
+  const daysInYear = isLeap ? '366' : '365'
   const diff = daysBetween(new Date('1970-01-01T00:00:00Z'), d).toFixed(0)
   return {
     unix_s: String(utc_s),

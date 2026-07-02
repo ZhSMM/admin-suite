@@ -105,6 +105,8 @@ const numberCards = reactive([
   { label: 'DEC (10)', value: '' },
   { label: 'HEX (16)', value: '' }
 ])
+// Card labels are constants so they don't go through i18n (technical codes)
+// but the page header + help text is fully translated.
 
 function computeNumber() {
   const raw = numInput.value.trim()

@@ -107,7 +107,7 @@ pub fn login(
     let visible_set: std::collections::HashSet<&String> = visible_codes.iter().collect();
     let all_menus: Vec<crate::models::Menu> = db.with_conn(|c| {
         let mut stmt = c.prepare(
-            "SELECT id, parent_id, code, title, path, icon, component, sort_order,
+            "SELECT id, parent_id, code, title, title_key, path, icon, component, sort_order,
                     visible, status, menu_type, permission_code, created_at, updated_at
              FROM menus WHERE status='active' ORDER BY sort_order, code",
         )?;
@@ -118,16 +118,17 @@ pub fn login(
                     parent_id: r.get(1)?,
                     code: r.get(2)?,
                     title: r.get(3)?,
-                    path: r.get(4)?,
-                    icon: r.get(5)?,
-                    component: r.get(6)?,
-                    sort_order: r.get(7)?,
-                    visible: r.get::<_, i64>(8)? != 0,
-                    status: r.get(9)?,
-                    menu_type: r.get(10)?,
-                    permission_code: r.get(11)?,
-                    created_at: r.get(12)?,
-                    updated_at: r.get(13)?,
+                    title_key: r.get(4)?,
+                    path: r.get(5)?,
+                    icon: r.get(6)?,
+                    component: r.get(7)?,
+                    sort_order: r.get(8)?,
+                    visible: r.get::<_, i64>(9)? != 0,
+                    status: r.get(10)?,
+                    menu_type: r.get(11)?,
+                    permission_code: r.get(12)?,
+                    created_at: r.get(13)?,
+                    updated_at: r.get(14)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

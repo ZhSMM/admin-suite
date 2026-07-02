@@ -24,10 +24,13 @@ export default {
   'common.copySuccess': '已复制',
   'common.copyFailed': '复制失败',
 
+  'app.name': 'Admin Suite',
+
   'auth.login': '登录',
   'auth.logout': '退出登录',
   'auth.username': '用户名',
   'auth.password': '密码',
+  'auth.passwordRequired': '请输入密码',
   'auth.loginSuccess': '登录成功',
   'auth.invalidCredentials': '用户名或密码错误',
   'auth.welcomeBack': '欢迎回来',
@@ -42,6 +45,15 @@ export default {
   'menu.locales': '语言管理',
   'menu.audit': '审计日志',
   'menu.tools': '工具',
+  'menu.tools.base': '进制转换',
+  'menu.tools.json': 'JSON 格式化',
+  'menu.tools.datetime': '时间日期',
+  'menu.tools.sql': 'SQL 格式化',
+  'menu.tools.encode': 'URL / HTML',
+  'menu.tools.hash': '哈希计算',
+  'menu.tools.generate': 'UUID 与密码',
+  'menu.tools.regex': '正则测试',
+  'menu.tools.diff': '文本对比',
 
   'tools.base.title': '进制转换',
   'tools.base.modeNumber': '数字',
@@ -192,6 +204,11 @@ export default {
   'users.columns.lastLogin': '最后登录',
   'users.password': '密码',
   'users.passwordHelp': '留空则不修改',
+  'users.statusActive': '启用',
+  'users.statusDisabled': '禁用',
+  'users.validation.usernameRequired': '请输入用户名',
+  'users.validation.displayNameRequired': '请输入显示名',
+  'users.validation.passwordTooShort': '密码至少 6 位',
 
   'roles.title': '角色管理',
   'roles.create': '新建角色',
@@ -204,6 +221,8 @@ export default {
 
   'menus.title': '菜单管理',
   'menus.create': '新建菜单',
+  'menus.titleKey': '标题 (i18n key)',
+  'menus.titleKeyHelp': '可选。填了之后通过 t() 查找,支持语言切换。',
   'menus.columns.path': '路径',
   'menus.columns.icon': '图标',
   'menus.columns.permission': '权限',
@@ -220,6 +239,21 @@ export default {
 
   'locales.title': '语言管理',
   'locales.import': '导入语言包',
+  'locales.export': '导出',
+  'locales.exportOne': '导出',
+  'locales.exportDialog': '导出语言包',
+  'locales.exportSource': '源语言',
+  'locales.exportTargetCode': '目标编码',
+  'locales.exportTargetLabel': '目标名称',
+  'locales.exportTargetLabelPlaceholder': '如: 日本語',
+  'locales.exportFillEmpty': '补齐缺失的 key',
+  'locales.exportFillEmptyHelp': '开启后,导出文件会包含所有应用用到的 key,还没翻译的用空字符串占位。',
+  'locales.download': '下载',
+  'locales.preview': '预览',
+  'locales.code': '编码',
+  'locales.name': '名称',
+  'locales.messages': '消息',
+  'locales.noLocale': '没有可导出的语言',
   'locales.importHelp':
     '上传 JSON 文件, 格式: { "id": "xx-YY", "label": "名称", "messages": { "common.ok": "OK", ... } }。',
 
@@ -227,5 +261,8 @@ export default {
   'audit.columns.action': '动作',
   'audit.columns.actor': '操作人',
   'audit.columns.target': '对象',
-  'audit.columns.time': '时间'
+  'audit.columns.resource': '资源',
+  'audit.columns.payload': '载荷',
+  'audit.columns.time': '时间',
+  'audit.actionFilter': '按动作过滤'
 }

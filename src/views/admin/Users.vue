@@ -17,8 +17,8 @@
           style="width: 140px; margin-right: 8px"
           @change="reload"
         >
-          <el-option label="active" value="active" />
-          <el-option label="disabled" value="disabled" />
+          <el-option :label="t('users.statusActive')" value="active" />
+          <el-option :label="t('users.statusDisabled')" value="disabled" />
         </el-select>
         <el-button type="primary" @click="openCreate">
           <el-icon><Plus /></el-icon>
@@ -45,7 +45,7 @@
       </el-table-column>
       <el-table-column :label="t('users.columns.status')" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.status === 'active' ? 'success' : 'info'">{{ row.status }}</el-tag>
+          <el-tag :type="row.status === 'active' ? 'success' : 'info'">{{ statusLabel(row.status) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column :label="t('users.columns.lastLogin')" width="170">
@@ -101,8 +101,8 @@
         </el-form-item>
         <el-form-item :label="t('common.status')">
           <el-select v-model="form.status">
-            <el-option label="active" value="active" />
-            <el-option label="disabled" value="disabled" />
+            <el-option :label="t('users.statusActive')" value="active" />
+            <el-option :label="t('users.statusDisabled')" value="disabled" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('users.columns.roles')">
@@ -153,9 +153,19 @@ async function reload() {
   loading.value = true
   try {
     list.value = await usersApi.list(auth.token, query)
+  } catch (e) {
+    // Surface the error in the table area; the user can retry.
+    console.error('users reload failed', e)
+    list.value = { items: [], total: 0, page: 1, page_size: 20 }
   } finally {
     loading.value = false
   }
+}
+
+function statusLabel(status: string): string {
+  if (status === 'active') return t('users.statusActive')
+  if (status === 'disabled') return t('users.statusDisabled')
+  return status
 }
 
 onMounted(async () => {
@@ -176,12 +186,19 @@ const form = reactive<UserCreate & { id?: string; password: string }>({
   role_ids: []
 })
 const rules: FormRules = {
-  username: [{ required: true, message: 'username required', trigger: 'blur' }],
-  display_name: [{ required: true, message: 'display name required', trigger: 'blur' }],
-  password: [{ required: false, validator: (_r, v, cb) => {
-    if (!v || (v as string).length >= 6) cb()
-    else cb(new Error('>= 6 chars'))
-  }, trigger: 'blur' }]
+  username: [{ required: true, message: () => t('users.validation.usernameRequired'), trigger: 'blur' }],
+  display_name: [{ required: true, message: () => t('users.validation.displayNameRequired'), trigger: 'blur' }],
+  password: [{
+    required: false,
+    validator: (_rule, value, callback) => {
+      if (!value || (value as string).length >= 6) {
+        callback()
+      } else {
+        callback(new Error(t('users.validation.passwordTooShort')))
+      }
+    },
+    trigger: 'blur'
+  }]
 }
 
 function openCreate() {
@@ -218,6 +235,8 @@ async function onSave() {
         id: dialog.id,
         display_name: form.display_name,
         email: form.email || null,
+        phone: form.phone || null,
+        avatar: form.avatar || null,
         status: form.status,
         role_ids: form.role_ids
       }
@@ -229,6 +248,8 @@ async function onSave() {
         display_name: form.display_name,
         password: form.password,
         email: form.email || null,
+        phone: form.phone || null,
+        avatar: form.avatar || null,
         status: form.status,
         role_ids: form.role_ids
       }

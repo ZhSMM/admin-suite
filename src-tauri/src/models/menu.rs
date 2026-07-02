@@ -6,6 +6,9 @@ pub struct Menu {
     pub parent_id: Option<String>,
     pub code: String,
     pub title: String,
+    /// i18n key for the sidebar title. The frontend looks this up with `t()`;
+    /// if missing or empty, the raw `title` field is shown.
+    pub title_key: Option<String>,
     pub path: Option<String>,
     pub icon: Option<String>,
     pub component: Option<String>,
@@ -23,6 +26,7 @@ pub struct MenuCreate {
     pub parent_id: Option<String>,
     pub code: String,
     pub title: String,
+    pub title_key: Option<String>,
     pub path: Option<String>,
     pub icon: Option<String>,
     pub component: Option<String>,
@@ -38,6 +42,7 @@ pub struct MenuUpdate {
     pub id: String,
     pub parent_id: Option<Option<String>>,
     pub title: Option<String>,
+    pub title_key: Option<Option<String>>,
     pub path: Option<Option<String>>,
     pub icon: Option<Option<String>>,
     pub component: Option<Option<String>>,
