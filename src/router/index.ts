@@ -128,6 +128,18 @@ const routes: RouteRecordRaw[] = [
         name: 'tool-diff',
         component: () => import('@/views/tools/Diff.vue'),
         meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.diff.title' }
+      },
+      {
+        path: 'tools/string',
+        name: 'tool-string',
+        component: () => import('@/views/tools/StringConverter.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.string.title' }
+      },
+      {
+        path: 'tools/crypto',
+        name: 'tool-crypto',
+        component: () => import('@/views/tools/Crypto.vue'),
+        meta: { requiresAuth: true, permission: 'tool:use', title: 'tools.crypto.title' }
       }
     ]
   },
