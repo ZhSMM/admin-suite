@@ -477,4 +477,41 @@ mod tests {
         assert!(cmp_versions("1.10", "1.2").is_gt());
         assert!(cmp_versions("1.2.0", "1.2").is_gt());
     }
+
+    /// End-to-end: boot a fresh DB and run every shipped migration against it.
+    /// This is the regression that catches typos in column names (the original
+    /// V7 used `parent_code` instead of `parent_id` and only blew up at user
+    /// startup, never in CI).
+    #[test]
+    fn full_migration_suite_applies_clean() {
+        use crate::db::Db;
+        let mut p = std::env::temp_dir();
+        p.push(format!("admin-suite-migrate-test-{}.sqlite", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&p);
+        let db = Db::open(&p).expect("open test db");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let applied = run_migrations(&db, &dir).expect("migrations apply");
+        // We seeded V1..V7 — assert the count is at least 7 so a typo in V8
+        // can't silently pass CI either.
+        assert!(
+            applied.len() >= 7,
+            "expected at least 7 migrations applied, got {}",
+            applied.len()
+        );
+        // Spot-check: app_state and the new menus rows from V7 exist.
+        db.with_conn(|c| {
+            let has_state: i64 =
+                c.query_row("SELECT COUNT(*) FROM app_state", [], |r| r.get(0))?;
+            assert!(has_state >= 9, "app_state should have at least 9 rows");
+            let m_settings: i64 = c.query_row(
+                "SELECT COUNT(*) FROM menus WHERE code = 'system.settings'",
+                [],
+                |r| r.get(0),
+            )?;
+            assert_eq!(m_settings, 1, "system.settings menu must be seeded");
+            Ok(())
+        })
+        .unwrap();
+        let _ = std::fs::remove_file(&p);
+    }
 }

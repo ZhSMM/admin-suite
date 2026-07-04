@@ -129,7 +129,7 @@ admin-suite/
    use crate::db::Db;
    use crate::auth::session::SessionStore;
    use crate::error::AppResult;
-
+   
    pub fn get(db: &Db, _sessions: &SessionStore, _token: &str, key: &str) -> AppResult<String> {
        db.with_conn(|c| {
            let v: String = c.query_row(
@@ -137,7 +137,7 @@ admin-suite/
            Ok(v)
        })
    }
-
+   
    pub fn set(db: &Db, sessions: &SessionStore, token: &str,
               key: &str, value: &str) -> AppResult<()> {
        require_permission(sessions, token, "settings:write")?;

@@ -35,13 +35,16 @@ INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
 
 -- Three new admin pages: Settings, Backups, plus a "palette" placeholder we
 -- don't render as a route but flag here so it's discoverable in Menus management.
-INSERT OR IGNORE INTO menus (id, code, parent_code, path, title, title_key,
-                             permission_code, icon, sort, visible, status, menu_type)
+INSERT OR IGNORE INTO menus (id, parent_id, code, title, title_key, path,
+                             icon, sort_order, visible, status, menu_type,
+                             permission_code)
 VALUES
-    ('m_settings', 'system.settings', 'system', '/system/settings',
-        'Settings', 'menu.settings', 'settings:manage', 'Setting', 60, 1, 'active', 'menu'),
-    ('m_backups',  'system.backups',  'system', '/system/backups',
-        'Backups',  'menu.backups',  'backup:manage',   'Folder',  70, 1, 'active', 'menu');
+    ('m_settings', 'm_system', 'system.settings', 'Settings', 'menu.settings',
+        '/system/settings', 'Setting', 60, 1, 'active', 'menu',
+        'settings:manage'),
+    ('m_backups',  'm_system', 'system.backups',  'Backups',  'menu.backups',
+        '/system/backups',  'Folder',  70, 1, 'active', 'menu',
+        'backup:manage');
 
 -- Auto-grant to super-admin so the pages appear immediately.
 INSERT OR IGNORE INTO role_menus (role_id, menu_id)
