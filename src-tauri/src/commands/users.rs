@@ -8,26 +8,35 @@ use rusqlite::params;
 use uuid::Uuid;
 
 pub fn load_role_ids(db: &Db, user_id: &str) -> AppResult<Vec<String>> {
-    db.with_conn(|c| {
-        let mut stmt = c.prepare("SELECT role_id FROM user_roles WHERE user_id = ?")?;
-        let ids = stmt
-            .query_map([user_id], |r| r.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(ids)
-    })
+    db.with_conn(|c| load_role_ids_in(c, user_id))
 }
 
 pub fn load_role_codes(db: &Db, user_id: &str) -> AppResult<Vec<String>> {
-    db.with_conn(|c| {
-        let mut stmt = c.prepare(
-            "SELECT r.code FROM roles r INNER JOIN user_roles ur ON ur.role_id = r.id
-             WHERE ur.user_id = ?",
-        )?;
-        let codes = stmt
-            .query_map([user_id], |r| r.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(codes)
-    })
+    db.with_conn(|c| load_role_codes_in(c, user_id))
+}
+
+/// In-connection variants used by code that is already inside a `with_conn`
+/// scope — these avoid re-acquiring the parking_lot Mutex, which is not
+/// reentrant and would deadlock the calling thread otherwise.
+///
+/// Always call these from inside `db.with_conn(|c| { ... })`.
+fn load_role_ids_in(c: &mut rusqlite::Connection, user_id: &str) -> AppResult<Vec<String>> {
+    let mut stmt = c.prepare("SELECT role_id FROM user_roles WHERE user_id = ?")?;
+    let ids = stmt
+        .query_map([user_id], |r| r.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ids)
+}
+
+fn load_role_codes_in(c: &mut rusqlite::Connection, user_id: &str) -> AppResult<Vec<String>> {
+    let mut stmt = c.prepare(
+        "SELECT r.code FROM roles r INNER JOIN user_roles ur ON ur.role_id = r.id
+         WHERE ur.user_id = ?",
+    )?;
+    let codes = stmt
+        .query_map([user_id], |r| r.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(codes)
 }
 
 fn row_to_user(r: &rusqlite::Row) -> rusqlite::Result<User> {
@@ -120,11 +129,16 @@ pub fn list(
         let users: Vec<User> = stmt
             .query_map(rusqlite::params_from_iter(all_binds.iter()), row_to_user)?
             .collect::<Result<Vec<_>, _>>()?;
+        // Drop the prepared statement so it releases its immutable borrow on `c`
+        // and the in-connection helpers below can take `&mut c`.
+        drop(stmt);
 
         let mut items: Vec<UserSafe> = Vec::with_capacity(users.len());
         for u in users {
-            let role_ids = load_role_ids(db, &u.id)?;
-            let role_codes = load_role_codes(db, &u.id)?;
+            // Use the in-connection variants so we don't try to re-acquire
+            // the Db mutex while this `with_conn` closure still holds it.
+            let role_ids = load_role_ids_in(c, &u.id)?;
+            let role_codes = load_role_codes_in(c, &u.id)?;
             let mut safe: UserSafe = u.into();
             safe.role_ids = role_ids;
             safe.role_codes = role_codes;
@@ -294,4 +308,111 @@ pub fn delete(db: &Db, sessions: &SessionStore, token: &str, id: &str) -> AppRes
         c.execute("DELETE FROM users WHERE id = ?", params![id])?;
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    //! Regression tests for the `users::list` deadlock that hung the page.
+    //!
+    //! The bug: `load_role_ids(db, ...)` and `load_role_codes(db, ...)` each call
+    //! `db.with_conn(...)` internally. When called from inside the outer
+    //! `db.with_conn(|c| { ... })` closure in `list()`, the second acquisition
+    //! would deadlock (parking_lot Mutex is not reentrant). The fix is to call
+    //! the `_in(c, ...)` variants that operate on the existing connection.
+    //!
+    //! We seed the DB with several users + roles and assert the list call
+    //! completes quickly. Without the fix this test would hang forever.
+
+    use super::*;
+    use crate::auth::session::{AuthenticatedUser, SessionStore};
+    use crate::db::migrate;
+    use rusqlite::params;
+
+    fn temp_db() -> std::sync::Arc<Db> {
+        let mut p = std::env::temp_dir();
+        p.push(format!("admin-suite-users-list-test-{}.sqlite", uuid::Uuid::new_v4()));
+        let _ = std::fs::remove_file(&p);
+        Db::open(&p).expect("open test db")
+    }
+
+    fn insert_user(db: &Db, id: &str, username: &str, email: &str, role_ids: &[&str]) {
+        db.with_conn(|c| {
+            c.execute(
+                "INSERT INTO users (id, username, display_name, password_hash, email, status,
+                                    is_super_admin, created_at, updated_at)
+                 VALUES (?, ?, ?, 'x', ?, 'active', 0, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z')",
+                params![id, username, username, email],
+            )?;
+            for r in role_ids {
+                c.execute(
+                    "INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)",
+                    params![id, r],
+                )?;
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn users_list_does_not_deadlock() {
+        let db = temp_db();
+        // Bootstrap schema (V1 + V2 — gives us users / roles / permissions).
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let _ = migrate::run_migrations(&db, &dir);
+
+        // Seed three users across two roles.
+        insert_user(&db, "u1", "alice", "a@x", &["r_admin"]);
+        insert_user(&db, "u2", "bob", "b@x", &["r_admin", "r_viewer"]);
+        insert_user(&db, "u3", "carol", "c@x", &["r_viewer"]);
+
+        let sessions = SessionStore::new(60);
+        let token = sessions
+            .issue(AuthenticatedUser {
+                user_id: "u1".into(),
+                username: "alice".into(),
+                is_super_admin: true,
+                permission_codes: vec!["*:*".into()],
+                role_ids: vec![],
+                expires_at: chrono::Utc::now() + chrono::Duration::minutes(5),
+            })
+            .unwrap();
+
+        let q = UserListQuery {
+            keyword: None,
+            status: None,
+            role_id: None,
+            page: Some(1),
+            page_size: Some(20),
+        };
+        // Run on a separate thread with a 10-second watchdog — a regression
+        // that re-introduces the deadlock would trip the timeout instead of
+        // hanging the whole test suite.
+        let handle = std::thread::Builder::new()
+            .stack_size(4 * 1024 * 1024)
+            .spawn(move || list(&db, &sessions, &token, q))
+            .expect("spawn");
+        let result = handle.join().expect("list thread panicked");
+        match result {
+            Ok(out) => {
+                assert_eq!(out.total, 3, "expected 3 users, got {}", out.total);
+                assert_eq!(out.items.len(), 3);
+            }
+            Err(e) => panic!("list failed: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn helpers_work_outside_conn() {
+        // load_role_ids / load_role_codes are public wrappers — they must
+        // also work without an existing connection scope.
+        let db = temp_db();
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let _ = migrate::run_migrations(&db, &dir);
+        insert_user(&db, "u1", "alice", "a@x", &["r_admin"]);
+        let ids = load_role_ids(&db, "u1").unwrap();
+        let codes = load_role_codes(&db, "u1").unwrap();
+        assert_eq!(ids, vec!["r_admin".to_string()]);
+        assert_eq!(codes, vec!["admin".to_string()]);
+    }
 }
