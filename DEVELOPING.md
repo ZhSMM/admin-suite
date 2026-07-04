@@ -612,6 +612,28 @@ npm run tauri:build          # 本地出安装包(target/release/bundle/)
 
 **新增一个 backup 钩子(比如云上传):** 在 `backup.rs::create_backup` 末尾追加,不要在 `create` wrapper 里 —— wrapper 还要负责 trim。
 
+### 10.4 内置语言包刷新
+
+`resources` 表里存了 `en-US` / `zh-CN` 两行内置 locale,前端 `useLocaleStore.hydrate()` 从这里读它们的 messages。
+
+**坑:** V2 seed 时只有 ~150 keys。后续给 bundle 加的新 key(比如 `settings.*`, `backups.*`, `palette.*`,各种 validation message)只更新了 `src/i18n/locales/*.ts` 文件,DB 那两行没人同步 —— 用户激活内置 locale 时新 key 走 en-US fallback,Locales 导出"补齐缺失 key"会给新 key 填空字符串。
+
+**修法:** V8 migration 用 UPDATE 把内置 locale 的 `content` 列刷成当前 .ts bundle 的 JSON。文件由 `scripts/gen-v8-locale-refresh.py` 从 `src/i18n/locales/{en-US,zh-CN}.ts` 生成,所以:
+
+1. 加新 key → 改 .ts
+2. 跑 `python scripts/gen-v8-locale-refresh.py` → 生成 `V8__refresh_builtin_locales.sql`(覆盖)
+3. 提 PR,review 生成的 SQL(diff 应该只动 content 列)
+4. CI 的 `full_migration_suite_applies_clean` 测试会 assert `content.messages` 至少 400 keys —— V8 跑过后断言会失败,如果脚本忘了跑
+
+**为什么 UPDATE 不是 REPLACE:** 保留 row id 避免破坏 `role_menus` / `active` 指针。`built_in=1` 标志也不变,这样"不能删内置 locale"的逻辑继续生效。用户想自定义就 export + import 成不同 code(比如 `zh-CN-company`)。
+
+### 10.5 多语言生成
+
+- `scripts/gen-zh-tw.py` — 用 opencc s2tw 把 `zh-CN.ts` 转繁体 + 输出 `dist/zh-TW.json`(Locales 页面"导入"格式)
+- `scripts/gen-v8-locale-refresh.py` — 见 §10.4
+
+跑之前 `pip install opencc-python-reimplemented`(项目没装,因为用户不一定会下繁中包)。
+
 ---
 
 有疑问先翻这一份 —— 90% 的"为什么这么写"都能在这里找到答案。如果发现新坑,补到对应小节。

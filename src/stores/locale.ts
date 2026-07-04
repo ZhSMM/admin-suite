@@ -51,8 +51,13 @@ export const useLocaleStore = defineStore('locale', {
       try {
         const p = JSON.parse(resource.content) as LocalePayload
         const { setLocale, mergeMessages } = useLocale()
-        mergeMessages(p.messages || {})
+        // Order matters: switch the active locale FIRST, then merge messages into
+        // that locale.  Otherwise `mergeMessages` writes into whatever locale was
+        // active before this call, polluting it (e.g. importing zh-TW would
+        // overwrite en-US, then switching to "Chinese" would show zh-TW content
+        // because the message store got out of sync with `i18n.global.locale`).
         setLocale(resource.code)
+        mergeMessages(p.messages || {})
       } catch (e) {
         console.warn('failed to apply locale', resource.code, e)
       }

@@ -491,11 +491,11 @@ mod tests {
         let db = Db::open(&p).expect("open test db");
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
         let applied = run_migrations(&db, &dir).expect("migrations apply");
-        // We seeded V1..V7 — assert the count is at least 7 so a typo in V8
+        // We seeded V1..V8 — assert the count is at least 8 so a typo in V9
         // can't silently pass CI either.
         assert!(
-            applied.len() >= 7,
-            "expected at least 7 migrations applied, got {}",
+            applied.len() >= 8,
+            "expected at least 8 migrations applied, got {}",
             applied.len()
         );
         // Spot-check: app_state and the new menus rows from V7 exist.
@@ -509,6 +509,26 @@ mod tests {
                 |r| r.get(0),
             )?;
             assert_eq!(m_settings, 1, "system.settings menu must be seeded");
+            // V8 should refresh built-in locales with the current bundle key count.
+            for code in ["en-US", "zh-CN"] {
+                let content: String = c.query_row(
+                    "SELECT content FROM resources WHERE resource_type = 'locale' AND code = ?",
+                    [code],
+                    |r| r.get(0),
+                )?;
+                let parsed: serde_json::Value = serde_json::from_str(&content)
+                    .expect("built-in locale content must be valid JSON");
+                let n = parsed
+                    .get("messages")
+                    .and_then(|m| m.as_object())
+                    .map(|o| o.len())
+                    .unwrap_or(0);
+                assert!(
+                    n >= 400,
+                    "built-in locale {} only has {} keys — V8 may be stale, re-run scripts/gen-v8-locale-refresh.py",
+                    code, n
+                );
+            }
             Ok(())
         })
         .unwrap();
