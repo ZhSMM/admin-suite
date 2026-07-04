@@ -14,7 +14,7 @@
                 <el-select v-model="mode" size="small" style="width: 200px">
                   <el-option v-for="m in modes" :key="m.value" :label="m.label" :value="m.value" />
                 </el-select>
-                <el-button size="small" @click="loadFile">{{ t('tools.json.loadFile') }}</el-button>
+                <el-button size="small" @click="loadFile">{{ t('tools.encode.loadFile') }}</el-button>
                 <input ref="fileInput" type="file" hidden @change="onFile" />
               </el-space>
             </div>
@@ -61,25 +61,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { DocumentCopy, Delete, CircleClose } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 
-const modes = [
-  { label: 'URL encode',         value: 'url' },
-  { label: 'URL decode',         value: 'url-dec' },
-  { label: 'HTML entity encode', value: 'html' },
-  { label: 'HTML entity decode', value: 'html-dec' },
-  { label: 'Base64 encode',      value: 'b64' },
-  { label: 'Base64 decode',      value: 'b64-dec' },
-  { label: 'Hex encode (bytes)', value: 'hex' },
-  { label: 'Hex decode (bytes)', value: 'hex-dec' },
-  { label: 'Unicode escape',     value: 'unicode-esc' },
-  { label: 'Unicode unescape',   value: 'unicode-unesc' }
-]
+const modes = computed(() => [
+  { label: t('tools.encode.mode.url'),           value: 'url' as const },
+  { label: t('tools.encode.mode.url-dec'),      value: 'url-dec' as const },
+  { label: t('tools.encode.mode.html'),         value: 'html' as const },
+  { label: t('tools.encode.mode.html-dec'),     value: 'html-dec' as const },
+  { label: t('tools.encode.mode.b64'),          value: 'b64' as const },
+  { label: t('tools.encode.mode.b64-dec'),      value: 'b64-dec' as const },
+  { label: t('tools.encode.mode.hex'),          value: 'hex' as const },
+  { label: t('tools.encode.mode.hex-dec'),      value: 'hex-dec' as const },
+  { label: t('tools.encode.mode.unicode-esc'),  value: 'unicode-esc' as const },
+  { label: t('tools.encode.mode.unicode-unesc'), value: 'unicode-unesc' as const }
+])
 
 type Mode = 'url' | 'url-dec' | 'html' | 'html-dec' | 'b64' | 'b64-dec' | 'hex' | 'hex-dec' | 'unicode-esc' | 'unicode-unesc'
 

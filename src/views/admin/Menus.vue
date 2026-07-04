@@ -29,15 +29,15 @@
       <el-table-column :label="t('menus.columns.permission')" prop="permission_code" width="160" />
       <el-table-column :label="t('menus.columns.visible')" width="80">
         <template #default="{ row }">
-          <el-tag v-if="row.visible" type="success" size="small">yes</el-tag>
-          <el-tag v-else type="info" size="small">no</el-tag>
+          <el-tag v-if="row.visible" type="success" size="small">{{ t('common.yes') }}</el-tag>
+          <el-tag v-else type="info" size="small">{{ t('common.no') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column :label="t('common.actions')" width="200" fixed="right">
+      <el-table-column :label="t('common.actions')" width="220" fixed="right">
         <template #default="{ row }">
           <el-button text type="primary" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
           <el-button text type="primary" @click="openCreate(row.id)">
-            + child
+            {{ t('menus.createChild') }}
           </el-button>
           <el-button text type="danger" @click="onDelete(row)">{{ t('common.delete') }}</el-button>
         </template>
@@ -58,17 +58,17 @@
           <el-input v-model="form.title" />
         </el-form-item>
         <el-form-item :label="t('menus.titleKey')">
-          <el-input v-model="form.title_key" placeholder="menu.users" />
+          <el-input v-model="form.title_key" :placeholder="t('menus.titleKeyPlaceholder')" />
           <small style="color: var(--text-secondary)">{{ t('menus.titleKeyHelp') }}</small>
         </el-form-item>
         <el-form-item :label="t('menus.columns.path')">
           <el-input v-model="form.path" />
         </el-form-item>
         <el-form-item :label="t('menus.columns.icon')">
-          <el-input v-model="form.icon" placeholder="user-filled" />
+          <el-input v-model="form.icon" :placeholder="t('menus.iconPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('menus.columns.permission')">
-          <el-input v-model="form.permission_code" placeholder="user:read" />
+          <el-input v-model="form.permission_code" :placeholder="t('menus.permissionPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('common.sort')">
           <el-input-number v-model="form.sort_order" :min="0" />

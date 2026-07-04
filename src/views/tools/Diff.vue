@@ -22,7 +22,7 @@
         <el-card shadow="never">
           <template #header>
             <div class="card-header">
-              <strong>A — {{ t('tools.diff.original') }}</strong>
+              <strong>{{ t('tools.diff.labelA') }} — {{ t('tools.diff.original') }}</strong>
               <span class="hint">{{ left.length }} {{ t('tools.diff.chars') }}</span>
             </div>
           </template>
@@ -33,7 +33,7 @@
         <el-card shadow="never">
           <template #header>
             <div class="card-header">
-              <strong>B — {{ t('tools.diff.modified') }}</strong>
+              <strong>{{ t('tools.diff.labelB') }} — {{ t('tools.diff.modified') }}</strong>
               <span class="hint">{{ right.length }} {{ t('tools.diff.chars') }}</span>
             </div>
           </template>

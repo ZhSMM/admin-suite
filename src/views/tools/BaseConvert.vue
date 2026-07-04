@@ -22,10 +22,10 @@
           </el-form-item>
           <el-form-item :label="t('tools.base.fromBase')">
             <el-select v-model="fromBase" style="width: 200px" @change="computeNumber">
-              <el-option label="Binary (2)" :value="2" />
-              <el-option label="Octal (8)" :value="8" />
-              <el-option label="Decimal (10)" :value="10" />
-              <el-option label="Hex (16)" :value="16" />
+              <el-option :label="t('tools.base.fromBase.binary')" :value="2" />
+              <el-option :label="t('tools.base.fromBase.octal')" :value="8" />
+              <el-option :label="t('tools.base.fromBase.decimal')" :value="10" />
+              <el-option :label="t('tools.base.fromBase.hex')" :value="16" />
             </el-select>
           </el-form-item>
         </el-form>
@@ -35,7 +35,7 @@
         <el-col :span="8" v-for="card in numberCards" :key="card.label">
           <el-card shadow="hover" class="output-card">
             <template #header>
-              <strong>{{ card.label }}</strong>
+              <strong>{{ numberLabel(card) }}</strong>
             </template>
             <div class="output-value">
               <code>{{ card.value || '—' }}</code>
@@ -69,7 +69,7 @@
         <el-col :span="12" v-for="card in textCards" :key="card.label">
           <el-card shadow="hover" class="output-card">
             <template #header>
-              <strong>{{ card.label }}</strong>
+              <strong>{{ textLabel(card) }}</strong>
             </template>
             <div class="output-value">
               <code :class="{ mono: true }">{{ card.value || '—' }}</code>
@@ -100,13 +100,13 @@ const textInput = ref('Hello, Admin Suite!')
 
 // -------- Number mode --------
 const numberCards = reactive([
-  { label: 'BIN (2)',  value: '' },
-  { label: 'OCT (8)',  value: '' },
-  { label: 'DEC (10)', value: '' },
-  { label: 'HEX (16)', value: '' }
+  { label: 'tools.base.output.bin', value: '' },
+  { label: 'tools.base.output.oct', value: '' },
+  { label: 'tools.base.output.dec', value: '' },
+  { label: 'tools.base.output.hex', value: '' }
 ])
-// Card labels are constants so they don't go through i18n (technical codes)
-// but the page header + help text is fully translated.
+// `label` here is a translation key — the template renders it via t().
+function numberLabel(card: { label: string }) { return t(card.label) }
 
 function computeNumber() {
   const raw = numInput.value.trim()
@@ -136,13 +136,14 @@ function computeNumber() {
 
 // -------- Text mode --------
 const textCards = reactive([
-  { label: 'HEX',         value: '' },
-  { label: 'BIN',         value: '' },
-  { label: 'Base64',      value: '' },
-  { label: 'URL-encoded', value: '' },
-  { label: 'Char codes',  value: '' },
-  { label: 'Length (B)',  value: '' }
+  { label: 'tools.base.output.hexBytes',   value: '' },
+  { label: 'tools.base.output.binBytes',   value: '' },
+  { label: 'tools.base.output.base64',     value: '' },
+  { label: 'tools.base.output.url',        value: '' },
+  { label: 'tools.base.output.charCodes',  value: '' },
+  { label: 'tools.base.output.length',     value: '' }
 ])
+function textLabel(card: { label: string }) { return t(card.label) }
 
 function computeText() {
   const s = textInput.value

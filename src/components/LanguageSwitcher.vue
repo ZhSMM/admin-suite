@@ -1,6 +1,6 @@
 <template>
   <el-dropdown trigger="click" @command="(c: string) => locale.activate(c)">
-    <el-button text :title="locale.active?.name || 'Language'">
+    <el-button text :title="locale.active?.name || t('common.language')">
       <el-icon :size="20"><ChatDotRound /></el-icon>
     </el-button>
     <template #dropdown>
@@ -20,7 +20,9 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useLocaleStore } from '@/stores/locale'
 
+const { t } = useI18n()
 const locale = useLocaleStore()
 </script>

@@ -32,7 +32,7 @@
             <el-form-item :label="t('tools.datetime.isoInput')">
               <el-input
                 v-model="isoInput"
-                placeholder="2026-07-02T00:00:00Z"
+                :placeholder="t('tools.datetime.isoPlaceholder')"
                 @input="fromIso"
               />
             </el-form-item>
@@ -49,7 +49,7 @@
             <el-form-item :label="t('tools.datetime.custom')">
               <el-input
                 v-model="format"
-                placeholder="YYYY-MM-DD HH:mm:ss"
+                :placeholder="t('tools.datetime.customPlaceholder')"
                 @input="recomputeAll"
               />
             </el-form-item>

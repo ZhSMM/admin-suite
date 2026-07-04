@@ -35,9 +35,9 @@
             <el-space>
               <span>{{ t('tools.json.indent') }}</span>
               <el-select v-model="indent" style="width: 100px">
-                <el-option :value="2" label="2" />
-                <el-option :value="4" label="4" />
-                <el-option value="tab" label="Tab" />
+                <el-option :value="2" :label="t('tools.json.indent.2')" />
+                <el-option :value="4" :label="t('tools.json.indent.4')" />
+                <el-option value="tab" :label="t('tools.json.indent.tabs')" />
               </el-select>
             </el-space>
             <el-checkbox v-model="sortKeys">{{ t('tools.json.sortKeys') }}</el-checkbox>

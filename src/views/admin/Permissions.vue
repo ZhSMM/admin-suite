@@ -3,12 +3,13 @@
     <div class="page-header">
       <h2>{{ t('perms.title') }}</h2>
     </div>
+    <el-alert :title="t('perms.help')" type="info" :closable="false" style="margin-bottom: 12px" />
     <el-table :data="perms" v-loading="loading" border>
-      <el-table-column label="Code" prop="code" width="240" />
-      <el-table-column label="Resource" prop="resource" width="120" />
-      <el-table-column label="Action" prop="action" width="120" />
-      <el-table-column label="Name" prop="name" />
-      <el-table-column :label="t('common.description')" prop="description" />
+      <el-table-column :label="t('perms.columns.code')" prop="code" width="240" />
+      <el-table-column :label="t('perms.columns.resource')" prop="resource" width="120" />
+      <el-table-column :label="t('perms.columns.action')" prop="action" width="120" />
+      <el-table-column :label="t('perms.columns.name')" prop="name" />
+      <el-table-column :label="t('perms.columns.description')" prop="description" />
     </el-table>
   </div>
 </template>

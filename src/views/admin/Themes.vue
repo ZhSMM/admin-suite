@@ -23,10 +23,12 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="Dark" width="80">
+      <el-table-column :label="t('common.dark')" width="80">
         <template #default="{ row }">
-          <el-tag v-if="isDark(row)" type="warning" size="small">dark</el-tag>
-          <el-tag v-else size="small">light</el-tag>
+          <el-tag v-if="isDark(row)" type="warning" size="small">
+            {{ t('themes.preview.dark') }}
+          </el-tag>
+          <el-tag v-else size="small">{{ t('themes.preview.light') }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column :label="t('common.actions')" width="240">

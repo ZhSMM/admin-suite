@@ -29,7 +29,7 @@
       </el-table-column>
       <el-table-column :label="t('roles.columns.builtIn')" width="100">
         <template #default="{ row }">
-          <el-tag v-if="row.built_in" type="info" size="small">built-in</el-tag>
+          <el-tag v-if="row.built_in" type="info" size="small">{{ t('common.builtIn') }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column :label="t('common.actions')" width="280" fixed="right">
@@ -70,8 +70,8 @@
         </el-form-item>
         <el-form-item :label="t('common.status')">
           <el-select v-model="form.status">
-            <el-option label="active" value="active" />
-            <el-option label="disabled" value="disabled" />
+            <el-option :label="t('users.statusActive')" value="active" />
+            <el-option :label="t('users.statusDisabled')" value="disabled" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -88,7 +88,7 @@
       <el-transfer
         v-model="permDialog.selected"
         :data="permDialog.options"
-        :titles="['Available', 'Selected']"
+        :titles="[t('roles.transfer.available'), t('roles.transfer.selected')]"
         filterable
         :filter-placeholder="t('common.search')"
       />
@@ -163,8 +163,8 @@ const form = reactive<{ code: string; name: string; description: string; sort_or
   status: 'active'
 })
 const rules: FormRules = {
-  code: [{ required: true, message: 'code required', trigger: 'blur' }],
-  name: [{ required: true, message: 'name required', trigger: 'blur' }]
+  code: [{ required: true, message: () => t('roles.validation.codeRequired'), trigger: 'blur' }],
+  name: [{ required: true, message: () => t('roles.validation.nameRequired'), trigger: 'blur' }]
 }
 
 function openCreate() {

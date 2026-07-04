@@ -3,8 +3,8 @@
     <el-card class="login-card" shadow="always">
       <template #header>
         <div class="login-header">
-          <h2>Admin Suite</h2>
-          <span>{{ t('auth.welcomeBack') }}</span>
+          <h2>{{ t('app.name') }}</h2>
+          <span>{{ t('app.tagline') }}</span>
         </div>
       </template>
 

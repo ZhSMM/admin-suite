@@ -3,9 +3,9 @@
     <div class="page-header">
       <h2>{{ t('tools.gen.title') }}</h2>
       <el-radio-group v-model="kind">
-        <el-radio-button value="uuid">UUID</el-radio-button>
-        <el-radio-button value="password">{{ t('tools.gen.password') }}</el-radio-button>
-        <el-radio-button value="passphrase">{{ t('tools.gen.passphrase') }}</el-radio-button>
+        <el-radio-button value="uuid">{{ t('tools.gen.tab.uuid') }}</el-radio-button>
+        <el-radio-button value="password">{{ t('tools.gen.tab.password') }}</el-radio-button>
+        <el-radio-button value="passphrase">{{ t('tools.gen.tab.passphrase') }}</el-radio-button>
       </el-radio-group>
     </div>
 
@@ -15,9 +15,9 @@
         <el-form label-width="140px">
           <el-form-item :label="t('tools.gen.version')">
             <el-radio-group v-model="uuidVersion">
-              <el-radio-button value="v4">v4 (random)</el-radio-button>
-              <el-radio-button value="v7">v7 (time-sortable)</el-radio-button>
-              <el-radio-button value="nil">nil UUID</el-radio-button>
+              <el-radio-button value="v4">{{ t('tools.gen.version.v4') }}</el-radio-button>
+              <el-radio-button value="v7">{{ t('tools.gen.version.v7') }}</el-radio-button>
+              <el-radio-button value="nil">{{ t('tools.gen.version.nil') }}</el-radio-button>
             </el-radio-group>
           </el-form-item>
           <el-form-item :label="t('tools.gen.uppercase')">
@@ -46,7 +46,7 @@
         <template #header>
           <div class="card-header">
             <strong>{{ t('tools.gen.output') }}</strong>
-            <span class="hint">{{ uuids.length }} UUID</span>
+            <span class="hint">{{ uuids.length }} {{ t('tools.gen.uuid') }}</span>
           </div>
         </template>
         <el-input

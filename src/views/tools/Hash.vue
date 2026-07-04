@@ -35,7 +35,7 @@
     <el-table :data="rows" v-loading="loading" style="margin-top: 16px">
       <el-table-column :label="t('tools.hash.algorithm')" width="140">
         <template #default="{ row }">
-          <el-tag :type="row.tag as any">{{ row.algo }}</el-tag>
+          <el-tag :type="row.tag as any">{{ algoLabel(row.algo) }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column :label="t('tools.hash.digest')">
@@ -63,7 +63,7 @@
       <el-table :data="hmacRows" :show-header="false">
         <el-table-column width="160">
           <template #default="{ row }">
-            <el-tag>{{ row.algo }}</el-tag>
+            <el-tag>{{ algoLabel(row.algo.replace('HMAC-', '')) }} (HMAC)</el-tag>
           </template>
         </el-table-column>
         <el-table-column>
@@ -101,6 +101,10 @@ const tagByAlgo: Record<Algo, 'primary' | 'success' | 'info' | 'warning' | 'dang
   'SHA-256': 'success',
   'SHA-384': 'info',
   'SHA-512': 'primary'
+}
+
+function algoLabel(algo: string): string {
+  return t(`tools.hash.algo.${algo}`)
 }
 
 const rows = reactive<{ algo: string; value: string; tag: string }[]>(
