@@ -6,3 +6,5 @@ pub mod menus;
 pub mod resources;
 pub mod audit;
 pub mod migrate_cmd;
+pub mod settings;
+pub mod backup;

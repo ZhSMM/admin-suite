@@ -76,6 +76,18 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, permission: 'audit:read', title: 'menu.audit' }
       },
       {
+        path: 'system/settings',
+        name: 'settings',
+        component: () => import('@/views/admin/Settings.vue'),
+        meta: { requiresAuth: true, permission: 'settings:manage', title: 'menu.settings' }
+      },
+      {
+        path: 'system/backups',
+        name: 'backups',
+        component: () => import('@/views/admin/Backups.vue'),
+        meta: { requiresAuth: true, permission: 'backup:manage', title: 'menu.backups' }
+      },
+      {
         path: 'tools/base',
         name: 'tool-base',
         component: () => import('@/views/tools/BaseConvert.vue'),

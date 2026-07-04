@@ -55,7 +55,7 @@
     <el-dialog v-model="exportDialog.open" :title="t('locales.exportDialog')" width="640">
       <el-form label-width="120px">
         <el-form-item :label="t('locales.exportSource')">
-          <el-select v-model="exportDialog.source" filterable @change="rebuildExport">
+          <el-select v-model="exportDialog.source" filterable>
             <el-option
               v-for="it in items"
               :key="it.id"
@@ -65,17 +65,17 @@
           </el-select>
         </el-form-item>
         <el-form-item :label="t('locales.exportTargetCode')">
-          <el-input v-model="exportDialog.targetCode" :placeholder="exportDialog.source" @input="rebuildExport" />
+          <el-input v-model="exportDialog.targetCode" :placeholder="exportDialog.source" />
         </el-form-item>
         <el-form-item :label="t('locales.exportTargetLabel')">
-          <el-input v-model="exportDialog.targetLabel" :placeholder="t('locales.exportTargetLabelPlaceholder')" @input="rebuildExport" />
+          <el-input v-model="exportDialog.targetLabel" :placeholder="t('locales.exportTargetLabelPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('locales.exportFillEmpty')">
-          <el-switch v-model="exportDialog.fillEmpty" @change="rebuildExport" />
+          <el-switch v-model="exportDialog.fillEmpty" />
           <small style="margin-left: 8px; color: var(--text-secondary)">{{ t('locales.exportFillEmptyHelp') }}</small>
         </el-form-item>
         <el-form-item :label="t('locales.preview')">
-          <pre class="export-preview">{{ exportDialog.text }}</pre>
+          <pre class="export-preview">{{ exportText }}</pre>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Upload, Download } from '@element-plus/icons-vue'
@@ -171,13 +171,45 @@ async function onFile(e: Event) {
 }
 
 // ---- Export ----
+// `text` is derived from source/targetCode/targetLabel/fillEmpty/items via a
+// computed — that way every input change refreshes the preview automatically
+// without us needing manual `rebuildExport()` calls + watch glue.  The previous
+// implementation missed several reactive edges (the @input handler on
+// targetCode/targetLabel fires only for user keystrokes, not programmatic
+// updates; the watch on `source` could race against `triggerExport`'s
+// synchronous assignments), which left the preview showing stale JSON.
 const exportDialog = reactive({
   open: false,
   source: '',
   targetCode: '',
   targetLabel: '',
-  fillEmpty: true,
-  text: ''
+  fillEmpty: true
+})
+
+const exportText = computed(() => {
+  const src = items.value.find((it) => it.code === exportDialog.source)
+  if (!src) return ''
+  const parsed = parseResource(src)
+  const code = exportDialog.targetCode.trim() || parsed.id
+  const label = exportDialog.targetLabel.trim() || parsed.label
+  // Union of keys across ALL locale resources so translators see every key
+  // the app might ask for, even if the source itself is missing some.
+  const keyUnion = new Set<string>()
+  for (const it of items.value) {
+    try {
+      const p = JSON.parse(it.content)
+      for (const k of Object.keys(p.messages || {})) keyUnion.add(k)
+    } catch { /* ignore malformed resource */ }
+  }
+  const messages: Record<string, string> = {}
+  for (const k of keyUnion) {
+    if (parsed.messages[k] !== undefined) {
+      messages[k] = parsed.messages[k]
+    } else if (exportDialog.fillEmpty) {
+      messages[k] = ''
+    }
+  }
+  return JSON.stringify({ id: code, label, messages }, null, 2)
 })
 
 function triggerExport() {
@@ -185,59 +217,26 @@ function triggerExport() {
     ElMessage.warning(t('locales.noLocale'))
     return
   }
-  exportDialog.open = true
   // Default: export the active locale (or the first one)
   const active = items.value.find((it) => it.active) || items.value[0]
   exportDialog.source = active.code
   exportDialog.targetCode = active.code
   exportDialog.targetLabel = active.name
-  rebuildExport()
+  exportDialog.fillEmpty = true
+  exportDialog.open = true
 }
 
 function exportOne(row: Resource) {
-  exportDialog.open = true
   exportDialog.source = row.code
   exportDialog.targetCode = row.code
   exportDialog.targetLabel = row.name
-  rebuildExport()
+  exportDialog.fillEmpty = true
+  exportDialog.open = true
 }
-
-function rebuildExport() {
-  const src = items.value.find((it) => it.code === exportDialog.source)
-  if (!src) {
-    exportDialog.text = ''
-    return
-  }
-  const parsed = parseResource(src)
-  const code = exportDialog.targetCode.trim() || parsed.id
-  const label = exportDialog.targetLabel.trim() || parsed.label
-  // Collect the union of keys across all locale resources so the translator
-  // sees every key the app might ask for, even if the source is missing some.
-  const keyUnion = new Set<string>()
-  const allMessages: Record<string, string> = {}
-  for (const it of items.value) {
-    try {
-      const p = JSON.parse(it.content)
-      for (const k of Object.keys(p.messages || {})) keyUnion.add(k)
-    } catch { /* ignore */ }
-  }
-  for (const k of keyUnion) {
-    if (parsed.messages[k] !== undefined) {
-      allMessages[k] = parsed.messages[k]
-    } else if (exportDialog.fillEmpty) {
-      allMessages[k] = ''
-    }
-  }
-  const payload = { id: code, label, messages: allMessages }
-  exportDialog.text = JSON.stringify(payload, null, 2)
-}
-
-watch(() => exportDialog.source, rebuildExport)
-watch(() => exportDialog.fillEmpty, rebuildExport)
 
 async function copyExport() {
   try {
-    await navigator.clipboard.writeText(exportDialog.text)
+    await navigator.clipboard.writeText(exportText.value)
     ElMessage.success(t('common.copySuccess'))
   } catch {
     ElMessage.error(t('common.copyFailed'))
@@ -247,7 +246,7 @@ async function copyExport() {
 function downloadExport() {
   const code = exportDialog.targetCode.trim() || exportDialog.source || 'locale'
   const filename = `${code}.json`
-  const blob = new Blob([exportDialog.text], { type: 'application/json' })
+  const blob = new Blob([exportText.value], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -258,6 +257,10 @@ function downloadExport() {
   URL.revokeObjectURL(url)
   ElMessage.success(t('common.success'))
 }
+
+// Defensive: when the items list changes (re-import, delete, activate) while the
+// dialog is open, the computed already handles it.  No manual refresh button
+// needed — the preview is always live.
 </script>
 
 <style scoped lang="scss">

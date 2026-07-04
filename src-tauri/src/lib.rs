@@ -20,11 +20,13 @@ use crate::auth::password::hash_password;
 use crate::auth::session::SessionStore;
 use crate::commands::auth as auth_cmd;
 use crate::commands::audit as audit_cmd;
+use crate::commands::backup as backup_cmd;
 use crate::commands::menus as menus_cmd;
 use crate::commands::migrate_cmd as migrate_cmd;
 use crate::commands::permissions as perm_cmd;
 use crate::commands::resources as res_cmd;
 use crate::commands::roles as roles_cmd;
+use crate::commands::settings as settings_cmd;
 use crate::commands::users as users_cmd;
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
@@ -326,6 +328,55 @@ fn app_info(state: State<AppState>) -> Result<AppInfo, AppError> {
 }
 
 // =============================================================
+// Settings
+// =============================================================
+
+#[tauri::command]
+fn settings_list(
+    state: State<AppState>,
+    token: String,
+) -> Result<Vec<settings_cmd::Setting>, AppError> {
+    settings_cmd::list(&state.db, &state.sessions, &token).map_err(map_err)
+}
+
+#[tauri::command]
+fn settings_set(
+    state: State<AppState>,
+    token: String,
+    updates: Vec<settings_cmd::SettingUpdate>,
+) -> Result<Vec<settings_cmd::Setting>, AppError> {
+    settings_cmd::set_many(&state.db, &state.sessions, &token, updates).map_err(map_err)
+}
+
+// =============================================================
+// Backups
+// =============================================================
+
+#[tauri::command]
+fn backup_list(state: State<AppState>, token: String) -> Result<Vec<backup_cmd::BackupInfo>, AppError> {
+    backup_cmd::list(&state.db, &state.sessions, &token).map_err(map_err)
+}
+
+#[tauri::command]
+fn backup_create(state: State<AppState>, token: String) -> Result<backup_cmd::BackupInfo, AppError> {
+    backup_cmd::create(&state.db, &state.sessions, &token).map_err(map_err)
+}
+
+#[tauri::command]
+fn backup_delete(state: State<AppState>, token: String, name: String) -> Result<(), AppError> {
+    backup_cmd::delete(&state.db, &state.sessions, &token, &name).map_err(map_err)
+}
+
+#[tauri::command]
+fn backup_restore(
+    state: State<AppState>,
+    token: String,
+    name: String,
+) -> Result<backup_cmd::RestoreRequest, AppError> {
+    backup_cmd::restore(&state.db, &state.sessions, &token, &name).map_err(map_err)
+}
+
+// =============================================================
 //                         Bootstrap
 // =============================================================
 
@@ -419,12 +470,36 @@ pub fn run() {
     let data_dir = data_dir();
     std::fs::create_dir_all(&data_dir).expect("create data dir");
     let db_path = data_dir.join("admin-suite.sqlite");
+
+    // Apply a pending restore BEFORE we open the live DB — once the connection
+    // is up the file is locked on Windows and the rename would fail.
+    match backup_cmd::apply_pending_restore(&db_path) {
+        Ok(Some(prev)) => log::warn!("restored DB from backup; previous copy kept at {}", prev),
+        Ok(None) => {}
+        Err(e) => log::error!("pending restore failed: {}", e),
+    }
+
     let db = Db::open(&db_path).expect("open db");
-    let sessions = SessionStore::new(60 * 8); // 8h
+
+    // Session TTL comes from settings; if absent, fall back to 8h so a fresh
+    // install with a not-yet-migrated DB doesn't panic.
+    let session_minutes: i64 = settings_cmd::get_or(&db, "session.timeout_minutes", "480")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(480);
+    let sessions = SessionStore::new(session_minutes);
 
     if let Err(e) = bootstrap(&db, &sessions) {
         eprintln!("bootstrap failed: {}", e);
         std::process::exit(1);
+    }
+
+    // Auto-backup is best-effort: a failure here should not block the app from
+    // starting (e.g. read-only data dir).  We log and continue.
+    match backup_cmd::maybe_auto_backup(&db, &data_dir) {
+        Ok(Some(info)) => log::info!("auto-backup: {}", info.name),
+        Ok(None) => {}
+        Err(e) => log::warn!("auto-backup skipped: {}", e),
     }
 
     let migrations_dir = db::migrate::resolve_migrations_dir(None).unwrap_or_else(|_| {
@@ -478,6 +553,12 @@ pub fn run() {
             migrate_run,
             migrate_status,
             app_info,
+            settings_list,
+            settings_set,
+            backup_list,
+            backup_create,
+            backup_delete,
+            backup_restore,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -67,31 +67,32 @@ npm run tauri:dev      # 启动 Vite + Tauri,自动跑 V1..V6 迁移
 admin-suite/
 ├── src/                              # 前端
 │   ├── api/                          # Tauri invoke 包装,每个资源一个文件
-│   ├── components/                   # 通用组件
+│   ├── components/                   # 通用组件 (Sidebar / Header / Palette / …)
 │   ├── i18n/{index.ts,locales/}      # 内置 zh-CN / en-US,可在 DB 资源里 override
-│   ├── layouts/DefaultLayout.vue     # 登录后的整体布局(顶栏 + 侧栏 + 内容)
+│   ├── layouts/DefaultLayout.vue     # 登录后的整体布局(顶栏 + 侧栏 + 内容 + Palette)
 │   ├── router/index.ts               # 路由表 + 权限守卫(beforeEach)
-│   ├── stores/{auth,theme,locale,menu}.ts  # Pinia
+│   ├── stores/{auth,theme,locale,menu,palette}.ts  # Pinia
 │   ├── themes/index.ts               # 主题应用器(CSS variables 注入)
 │   ├── views/
-│   │   ├── admin/                    # 系统管理(Users / Roles / Menus / …)
+│   │   ├── admin/                    # 系统管理(Users / Roles / Menus / Themes / Locales / Audit / Settings / Backups)
 │   │   └── tools/                    # 11 个工具页面
 │   └── main.ts
 ├── src-tauri/
 │   ├── migrations/                   # Flyway 风格 SQL
-│   │   ├── V1__init_schema.sql
-│   │   ├── V2__seed_acl.sql
-│   │   ├── V3__seed_tools.sql
-│   │   ├── V4__seed_tools_more.sql
-│   │   ├── V5__add_menu_title_key.sql
-│   │   └── V6__seed_string_crypto.sql
+│   │   ├── V1__init_schema.sql       # users / roles / permissions / menus / resources / audit_log
+│   │   ├── V2__seed_acl.sql          # 默认权限 + 内置角色 + super-admin
+│   │   ├── V3__seed_tools.sql        # 5 个 Tools + 菜单
+│   │   ├── V4__seed_tools_more.sql   # 再加 6 个 Tools
+│   │   ├── V5__add_menu_title_key.sql# menus.title_key 列
+│   │   ├── V6__seed_string_crypto.sql# String Converter + Crypto
+│   │   └── V7__seed_app_state.sql    # app_state 表 + settings/backup/permissions/menus
 │   ├── src/
 │   │   ├── auth/                     # argon2 密码 / SessionStore / require_permission
-│   │   ├── commands/                 # 业务实现(auth/users/roles/permissions/menus/…)
+│   │   ├── commands/                 # 业务实现(auth/users/roles/permissions/menus/resources/audit/settings/backup/…)
 │   │   ├── db/                       # Db (Mutex<Connection>) + migrate.rs
 │   │   ├── models/                   # serde 序列化模型(给前端用)
 │   │   ├── error.rs                  # AppError 枚举 → JSON 给前端
-│   │   └── lib.rs                    # Tauri bootstrap + #[tauri::command] 注册
+│   │   └── lib.rs                    # Tauri bootstrap + 命令注册 + 自动备份 + 应用 pending restore
 │   └── tauri.conf.json
 └── .github/workflows/
     ├── ci.yml                        # PR 检查:cargo check/test + vue-tsc + vite build
@@ -241,6 +242,14 @@ Tools 不需要 RBAC 单独权限,统一用 `tool:use`(见 V3 seed)。
 - **不要改历史 V\* 文件**(已发布版本的用户库会卡 checksum)。
 - `R__{description}.sql` 是 repeatable(每次 checksum 变了都重跑),只用于视图/函数/数据补丁。
 - 启动时 `migrate::run_migrations(db, dir)` 自动跑;也提供 `migrate_cmd` 让前端手动触发。
+
+### 3.6 加一个全局设置
+
+走 `app_state` kv 表 + `commands/settings.rs` 校验白名单。详见 §10.1。
+
+### 3.7 让新页面出现在 ⌘K 命令面板
+
+只要新路由有 `meta.title` 就会被自动收录(见 §10.2)。不需要单独注册。
 
 格式参考:
 ```sql
@@ -562,14 +571,46 @@ npm run tauri:build          # 本地出安装包(target/release/bundle/)
 
 ---
 
-## 10. 后续 Roadmap 想法(给下一个迭代参考)
+## 10. 全局设置 (Settings) 和 命令面板 (Command Palette)
 
-- [ ] 主题 / 语言在线编辑后,**导出迁移 SQL**(`resources` 表 → `V9__theme_*.sql`),方便分发
-- [ ] 用户头像上传(目前只有 `display_name`)
-- [ ] 审计日志可视化筛选(目前 `Audit.vue` 是表格,没时间范围/操作者过滤)
-- [ ] 设置中心(主题/语言之外的全局开关,如登录失败锁定、密码策略)
-- [ ] 集成测试:用 `tauri::test::mock_app` 跑前后端联调
-- [ ] 备份/导出 sqlite 文件(管理 → 数据库)
+### 10.1 Settings 架构
+
+**`app_state` kv 表** 存所有全局设置,值全部是 TEXT,后端按 key 做白名单 + 范围校验。
+
+新增一个设置的步骤:
+1. 在 `src-tauri/migrations/V{n+1}__add_xxx_settings.sql` 加 INSERT OR IGNORE 一行默认。
+2. 在 `src-tauri/src/commands/settings.rs::validate` 加一个分支:解析 + 范围检查 + 错误信息。
+3. 在 `src/views/admin/Settings.vue` 的 `form` / `apply` / `save` 三个函数各加一行同步。
+4. 在 `src/i18n/locales/{zh-CN,en-US}.ts` 加 `settings.*` 命名空间文案。
+
+如果新设置需要在**后端其他模块**读取(比如 `session.timeout_minutes`),用 `commands::settings::get_or(db, "session.timeout_minutes", "480")`。`get_or` 永远不抛错(找不到 key 返回默认值),适合 bootstrap 阶段用。
+
+### 10.2 命令面板 (⌘K)
+
+**位置:** `src/components/CommandPalette.vue`,挂载在 `DefaultLayout.vue` 的全局 root。
+
+**工作原理:** 启动时 `router.getRoutes()` 枚举所有带 `meta.title` 的路由,转成 `PaletteItem`,按 i18n key + path 做 includes 模糊匹配。`Enter` 跳路由,`↑/↓` 切换候选,`Esc` 关闭。
+
+**新增可搜索项**有两条路径:
+- 路由表里有 `meta.title` 自动出现,不用改 Palette。
+- 路由之外的(比如只想在 Palette 里出现的快捷操作)在 `CommandPalette.vue` 的 `items` computed 末尾追加。
+
+**禁用开关:** `settings.ui.command_palette = false` 时,只关闭 Ctrl+K 监听 —— 不删组件、不破坏其他逻辑。
+
+### 10.3 数据库备份 / 还原
+
+**位置:** `src-tauri/src/commands/backup.rs`,前端 `src/views/admin/Backups.vue`。
+
+**核心机制:**
+- `VACUUM INTO '<path>'` 拿一致快照(不阻塞读写)。
+- 备份文件存 `<data_dir>/backups/admin-suite-YYYYMMDD-HHmmss.sqlite`,元数据来自 `flyway_schema_history.installed_on`(拿不到就 fallback 到 mtime)。
+- 还原不直接改运行中的库(Windows 上文件被锁),而是写一个 `<data_dir>/.restore_pending` flag 文件,要求重启应用。`bootstrap` 启动时检查 flag,先 swap 库再开 connection。
+- swap 前把当前库备份成 `pre-restore-<时间>.sqlite`,留一个回滚锚点。
+- 路径合法性:任何 backup 操作都做 `canonicalize().starts_with(canonical_backups_dir)` 检查,拒绝 path traversal。
+
+**自动备份:** bootstrap 里 `backup_cmd::maybe_auto_backup(db, data_dir)` 由 `backup.auto_on_start`(默认 true)开关控制。trim 按 `backup.keep_count` 保留最新的 N 个,超了删最旧。
+
+**新增一个 backup 钩子(比如云上传):** 在 `backup.rs::create_backup` 末尾追加,不要在 `create` wrapper 里 —— wrapper 还要负责 trim。
 
 ---
 

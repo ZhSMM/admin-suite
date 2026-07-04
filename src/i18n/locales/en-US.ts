@@ -95,6 +95,8 @@ export default {
   'menu.locales': 'Languages',
   'menu.audit': 'Audit Log',
   'menu.tools': 'Tools',
+  'menu.settings': 'Settings',
+  'menu.backups': 'Backups',
   'menu.tools.base': 'Base Converter',
   'menu.tools.json': 'JSON Formatter',
   'menu.tools.datetime': 'Date & Time',
@@ -537,5 +539,54 @@ export default {
   'tools.crypto.xorKeyPlaceholder': 'Bytes as hex (e.g. deadbeef) or plain text',
   'tools.crypto.xorKeyHelp': 'Repeats over the input.  Symmetric: encrypt = decrypt.',
   'tools.crypto.xorKeyEmpty': 'XOR key cannot be empty.',
-  'tools.crypto.rc4Note': 'RC4 is a legacy stream cipher — not secure for new code, kept here for interoperability.'
+  'tools.crypto.rc4Note': 'RC4 is a legacy stream cipher — not secure for new code, kept here for interoperability.',
+
+  // ============================================================
+  // settings
+  // ============================================================
+  'settings.title': 'Settings',
+  'settings.help': 'Click "Save" in the top-right after changes. Session timeout and backup retention take effect after restart.',
+  'settings.section.session': 'Session',
+  'settings.section.auth': 'Authentication',
+  'settings.section.backup': 'Backup',
+  'settings.section.ui': 'UI',
+  'settings.session.timeoutMinutes': 'Session timeout (minutes)',
+  'settings.session.timeoutHelp': 'Auto-logout after this much inactivity. Range 5–1440.',
+  'settings.auth.passwordMinLength': 'Minimum password length',
+  'settings.auth.loginMaxFailures': 'Max login failures',
+  'settings.auth.lockoutMinutes': 'Lockout duration (minutes)',
+  'settings.auth.lockoutHelp': 'How long the account is locked after hitting the failure cap.',
+  'settings.backup.autoOnStart': 'Auto-backup on start',
+  'settings.backup.keepCount': 'Backups to keep',
+  'settings.backup.keepCountHelp': 'Older backups are deleted automatically once this is exceeded.',
+  'settings.ui.commandPalette': 'Enable ⌘K command palette',
+  'settings.ui.commandPaletteHelp': 'When off, Ctrl/Cmd+K no longer opens the palette.',
+
+  // ============================================================
+  // backups
+  // ============================================================
+  'backups.title': 'Backups',
+  'backups.help': 'Backups live under <data_dir>/backups/. Auto-backup on launch can be toggled in Settings.',
+  'backups.createNow': 'Backup now',
+  'backups.createSuccess': 'Backup created: {name}',
+  'backups.restore': 'Restore',
+  'backups.restoreDialog': 'Confirm restore',
+  'backups.restoreWarning': 'Restore requires restarting the app. The current DB is preserved as pre-restore-<timestamp>.sqlite in the data directory.',
+  'backups.restoreScheduled': 'Restore scheduled — please restart the app.',
+  'backups.restoreDone': 'Restore completed.',
+  'backups.columns.name': 'Filename',
+  'backups.columns.size': 'Size',
+  'backups.columns.createdAt': 'Created at',
+  'backups.delete.confirm': 'Delete backup {name}? This cannot be undone.',
+
+  // ============================================================
+  // palette
+  // ============================================================
+  'palette.title': 'Command palette',
+  'palette.placeholder': 'Search menus, tools, settings... (Ctrl/⌘+K)',
+  'palette.empty': 'No matches',
+  'palette.permissionDenied': 'No permission',
+  'palette.kind.tool': 'Tool',
+  'palette.kind.settings': 'Setting',
+  'palette.kind.page': 'Page'
 }

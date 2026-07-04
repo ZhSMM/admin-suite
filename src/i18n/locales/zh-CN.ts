@@ -116,6 +116,8 @@ export default {
   'menu.locales': '语言管理',
   'menu.audit': '审计日志',
   'menu.tools': '工具',
+  'menu.settings': '系统设置',
+  'menu.backups': '数据备份',
   'menu.tools.base': '进制转换',
   'menu.tools.json': 'JSON 格式化',
   'menu.tools.datetime': '时间日期',
@@ -558,5 +560,54 @@ export default {
   'tools.crypto.xorKeyPlaceholder': '密钥字节(hex 如 deadbeef)或纯文本',
   'tools.crypto.xorKeyHelp': '密钥循环与明文异或。加密 = 解密,对称。',
   'tools.crypto.xorKeyEmpty': 'XOR 密钥不能为空。',
-  'tools.crypto.rc4Note': 'RC4 是过时的流密码,新代码不建议使用,这里保留是为了互操作。'
+  'tools.crypto.rc4Note': 'RC4 是过时的流密码,新代码不建议使用,这里保留是为了互操作。',
+
+  // ============================================================
+  // settings
+  // ============================================================
+  'settings.title': '系统设置',
+  'settings.help': '修改后点击右上角"保存"。会话超时和备份保留数量重启后生效。',
+  'settings.section.session': '会话',
+  'settings.section.auth': '登录与密码',
+  'settings.section.backup': '备份',
+  'settings.section.ui': '界面',
+  'settings.session.timeoutMinutes': '会话超时(分钟)',
+  'settings.session.timeoutHelp': '超过该时间未活动会自动登出,范围 5–1440。',
+  'settings.auth.passwordMinLength': '密码最短长度',
+  'settings.auth.loginMaxFailures': '登录失败上限',
+  'settings.auth.lockoutMinutes': '锁定时长(分钟)',
+  'settings.auth.lockoutHelp': '达到失败上限后,账号被锁定的时长。',
+  'settings.backup.autoOnStart': '启动时自动备份',
+  'settings.backup.keepCount': '保留备份数量',
+  'settings.backup.keepCountHelp': '超出后自动删除最旧的备份文件。',
+  'settings.ui.commandPalette': '启用 ⌘K 命令面板',
+  'settings.ui.commandPaletteHelp': '关闭后 Ctrl/Cmd+K 不再唤起命令面板。',
+
+  // ============================================================
+  // backups
+  // ============================================================
+  'backups.title': '数据备份',
+  'backups.help': '备份文件保存在数据目录下的 backups/ 子目录,启动时按需自动备份。',
+  'backups.createNow': '立即备份',
+  'backups.createSuccess': '备份已创建:{name}',
+  'backups.restore': '还原',
+  'backups.restoreDialog': '确认还原',
+  'backups.restoreWarning': '还原操作需要重启应用才能生效。还原后当前库会被备份为 pre-restore-<时间>.sqlite,可在数据目录恢复。',
+  'backups.restoreScheduled': '已计划还原 — 请重启应用以生效。',
+  'backups.restoreDone': '还原完成。',
+  'backups.columns.name': '文件名',
+  'backups.columns.size': '大小',
+  'backups.columns.createdAt': '创建时间',
+  'backups.delete.confirm': '确定要删除备份 {name} 吗?此操作不可撤销。',
+
+  // ============================================================
+  // palette
+  // ============================================================
+  'palette.title': '命令面板',
+  'palette.placeholder': '搜索菜单、工具、设置...(Ctrl/⌘+K)',
+  'palette.empty': '无匹配项',
+  'palette.permissionDenied': '无权限访问',
+  'palette.kind.tool': '工具',
+  'palette.kind.settings': '设置',
+  'palette.kind.page': '页面'
 }

@@ -18,6 +18,7 @@
         </router-view>
       </el-main>
     </el-container>
+    <CommandPalette />
   </el-container>
 </template>
 
@@ -25,6 +26,7 @@
 import { ref } from 'vue'
 import Sidebar from '@/components/Sidebar.vue'
 import HeaderBar from '@/components/HeaderBar.vue'
+import CommandPalette from '@/components/CommandPalette.vue'
 
 const collapsed = ref(false)
 </script>

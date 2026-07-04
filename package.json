@@ -1,7 +1,7 @@
 {
   "name": "admin-suite",
   "private": true,
-  "version": "0.5.2",
+  "version": "0.5.3",
   "type": "module",
   "description": "Tauri + Rust + Vue3 admin system with Flyway-like migrations, RBAC, theming and i18n",
   "scripts": {
