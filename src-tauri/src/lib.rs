@@ -283,7 +283,16 @@ fn audit_list(
         &state.db,
         &state.sessions,
         &token,
-        query.unwrap_or(models::AuditQuery { action: None, actor_id: None, page: None, page_size: None }),
+        query.unwrap_or(models::AuditQuery {
+            action: None,
+            actor_id: None,
+            resource: None,
+            payload_search: None,
+            from: None,
+            to: None,
+            page: None,
+            page_size: None,
+        }),
     )
     .map_err(map_err)
 }

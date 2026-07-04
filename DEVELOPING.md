@@ -634,6 +634,51 @@ npm run tauri:build          # 本地出安装包(target/release/bundle/)
 
 跑之前 `pip install opencc-python-reimplemented`(项目没装,因为用户不一定会下繁中包)。
 
+### 10.6 审计日志查询增强
+
+`commands/audit::list` 的 `AuditQuery` 现在支持以下过滤:
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `actor_id` | i64 | 操作者用户 id |
+| `action` | `&str` | 模糊匹配(`LIKE %action%`),大小写不敏感 |
+| `resource` | `&str` | 模糊匹配 `target` 列(资源类型或路径) |
+| `payload_search` | `&str` | 在 `payload` 列(`details`)上做 `LIKE %x%` |
+| `from` / `to` | `i64` | unix 秒,闭区间 |
+| `page` / `page_size` | i64 | 默认 0/50 |
+
+后端测试在 `commands/audit::tests::filter_by_actor / filter_by_action_like / filter_by_resource_and_payload / filter_by_time_window / filters_combine_with_and` —— 加新过滤字段时按同一模式加一条单测。
+
+前端 `views/admin/Audit.vue` 有 filter card:`action` / `actor` / `resource` / `payload` 四个文本框 + 起始 / 结束时间选择器 + 1h / 24h / 7d 快捷按钮 + Reset。每次输入触发 `scheduleReload`(250ms debounce)。i18n key 都在 `audit.filter.*` 命名空间。
+
+### 10.7 最近使用 / 收藏 (Recent / Favorites)
+
+纯前端 localStorage,Pinia store 是 `useRecentStore`(在 `src/stores/recent.ts`):
+
+| 数据 | key | 上限 |
+| --- | --- | --- |
+| 每个 tool 的 recent 列表 | `admin-suite.recent.<tool-id>` | 10 |
+| 全局 favorites | `admin-suite.favorites` | 50 |
+
+写入时机:`src/composables/useToolRecorder.ts` 在 tool 页 mount 时保存一次,route 切换时(debounce 1s)再保存一次。tool 自身提供 `sanitize(snapshot)` 回调,负责抹掉 secret(Hash 工具只存 algorithm + truncated head;Crypto 只存 algorithm;Generate 不存密码学状态)。
+
+UI:
+- `RecentDrawer.vue` —— HeaderBar 右上角的 Clock 图标打开,两个 tab(Recent / Favorites)。点记录会派发 `CustomEvent('admin-suite:restore-snapshot')` 然后 `router.push`;tool 页在 `onMounted` 里监听这个 event 并把 snapshot 写回本地状态。
+- `PinButton.vue` —— HeaderBar 工具名旁边的星标,点击 toggle 当前 tool 的 favorite。
+- `CommandPalette.vue` —— query 空时优先列出 favorites,然后按 route 注册顺序补齐(最多 12 项)。
+
+**新增一个 tool 的录制:** 在 tool 页 `<script setup>` 顶部 `const { snapshot, restore, pinned, togglePin } = useToolRecorder({ id: 'my-tool', t, sanitize: (s) => s })`,然后给按钮和输入框加 `v-model` 绑到 snapshot 即可。Route 注册时保证 `meta.title` + `meta.icon` 就能出现在 Palette。
+
+### 10.8 前端测试 (Vitest)
+
+`npm test` 跑 `vitest run`,用例在 `src/**/__tests__/*.spec.ts`。
+
+- `vitest.config.ts` —— `happy-dom` env,`cache: false`,`cacheDir: '.vitest-cache'`,`@` alias 指向 `src/`。
+- `test/setup.ts` —— 公共 stub(目前只 reset vue-i18n singleton 状态)。
+- 当前覆盖:`useLocaleStore`(4 个 case,关键是 `apply()` 顺序)、`useRecentStore`(10 个 case)。
+
+**坑:vue-tsc 增量缓存会让 vitest 加载陈旧 .js。** `npm run build` 会把 `*.tsbuildinfo` 写进仓根目录,下次 `npm test` 偶尔会用 `tsconfig.tsbuildinfo` 里缓存的产物。如果遇到"改了源文件但用例仍然按旧行为跑"的现象,删 `tsconfig.tsbuildinfo` + `node_modules/.vite/` 再试。`vitest.config.ts` 里已经 `cache: false` 但 `tsconfig.tsbuildinfo` 是 tsc 自己管的,vitest 管不了。
+
 ---
 
 有疑问先翻这一份 —— 90% 的"为什么这么写"都能在这里找到答案。如果发现新坑,补到对应小节。

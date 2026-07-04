@@ -252,6 +252,23 @@ export default {
   'audit.actionFilter': 'Filter by action',
   'audit.actorFilter': 'Filter by actor',
   'audit.empty': 'No audit records',
+  'audit.filter.action': 'Action',
+  'audit.filter.actionPlaceholder': 'e.g. user.create',
+  'audit.filter.actor': 'Actor',
+  'audit.filter.actorPlaceholder': 'username or id',
+  'audit.filter.resource': 'Resource',
+  'audit.filter.resourcePlaceholder': 'e.g. user / role',
+  'audit.filter.payload': 'Payload search',
+  'audit.filter.payloadPlaceholder': 'substring match on JSON',
+  'audit.filter.from': 'From',
+  'audit.filter.fromPlaceholder': 'no limit',
+  'audit.filter.to': 'To',
+  'audit.filter.toPlaceholder': 'no limit',
+  'audit.filter.preset': 'Presets',
+  'audit.filter.preset1h': 'Last 1h',
+  'audit.filter.preset24h': 'Last 24h',
+  'audit.filter.preset7d': 'Last 7d',
+  'audit.filter.reset': 'Reset',
 
   // ============================================================
   // tools.base
@@ -588,5 +605,18 @@ export default {
   'palette.permissionDenied': 'No permission',
   'palette.kind.tool': 'Tool',
   'palette.kind.settings': 'Setting',
-  'palette.kind.page': 'Page'
+  'palette.kind.page': 'Page',
+
+  // ============================================================
+  // recents (drawer + favorites)
+  // ============================================================
+  'recents.title': 'Recent & Favorites',
+  'recents.tab.recent': 'Recent',
+  'recents.tab.favorites': 'Favorites',
+  'recents.empty': 'Nothing yet — use a tool a few times and it shows up here.',
+  'recents.favoritesEmpty': 'Tap the ☆ on any page header to pin it; one-click access from here.',
+  'recents.clearAll': 'Clear all',
+  'recents.unpin': 'Unpin',
+  'recents.pin': 'Pin current page',
+  'recents.recentHint': 'Tap an entry to reopen the tool with that input restored.'
 }

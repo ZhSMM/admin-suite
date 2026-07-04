@@ -273,6 +273,23 @@ export default {
   'audit.actionFilter': '按动作过滤',
   'audit.actorFilter': '按操作人过滤',
   'audit.empty': '暂无审计记录',
+  'audit.filter.action': '动作',
+  'audit.filter.actionPlaceholder': '例: user.create',
+  'audit.filter.actor': '操作人',
+  'audit.filter.actorPlaceholder': '用户名或 id',
+  'audit.filter.resource': '资源',
+  'audit.filter.resourcePlaceholder': '例: user / role',
+  'audit.filter.payload': '载荷搜索',
+  'audit.filter.payloadPlaceholder': 'JSON 内容模糊匹配',
+  'audit.filter.from': '起始时间',
+  'audit.filter.fromPlaceholder': '不限',
+  'audit.filter.to': '截止时间',
+  'audit.filter.toPlaceholder': '不限',
+  'audit.filter.preset': '快捷',
+  'audit.filter.preset1h': '最近 1 小时',
+  'audit.filter.preset24h': '最近 24 小时',
+  'audit.filter.preset7d': '最近 7 天',
+  'audit.filter.reset': '清空筛选',
 
   // ============================================================
   // tools.base
@@ -609,5 +626,18 @@ export default {
   'palette.permissionDenied': '无权限访问',
   'palette.kind.tool': '工具',
   'palette.kind.settings': '设置',
-  'palette.kind.page': '页面'
+  'palette.kind.page': '页面',
+
+  // ============================================================
+  // recents (drawer + favorites)
+  // ============================================================
+  'recents.title': '最近与收藏',
+  'recents.tab.recent': '最近',
+  'recents.tab.favorites': '收藏',
+  'recents.empty': '还没有记录 — 用几次工具就会出现在这里。',
+  'recents.favoritesEmpty': '点工具页头部的☆加收藏,这里就能一键到达。',
+  'recents.clearAll': '清空全部',
+  'recents.unpin': '取消收藏',
+  'recents.pin': '收藏当前页',
+  'recents.recentHint': '点条目回到该工具并恢复输入。'
 }

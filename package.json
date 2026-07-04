@@ -1,7 +1,7 @@
 {
   "name": "admin-suite",
   "private": true,
-  "version": "0.5.5",
+  "version": "0.5.6",
   "type": "module",
   "description": "Tauri + Rust + Vue3 admin system with Flyway-like migrations, RBAC, theming and i18n",
   "scripts": {
@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",
@@ -31,8 +33,12 @@
     "@types/md5": "^2.3.6",
     "@types/node": "^20.14.2",
     "@vitejs/plugin-vue": "^5.0.5",
+    "happy-dom": "^15.7.4",
+    "pinia": "^2.1.7",
     "sass-embedded": "^1.100.0",
     "typescript": "^5.4.5",
+    "vitest": "^2.0.5",
+    "@vue/test-utils": "^2.4.6",
     "vite": "^5.2.13",
     "vue-tsc": "^2.0.21"
   }

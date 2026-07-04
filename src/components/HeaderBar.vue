@@ -8,10 +8,14 @@
         </el-icon>
       </el-button>
       <Breadcrumb />
+      <PinButton />
     </div>
     <div class="right">
       <ThemeSwitcher />
       <LanguageSwitcher />
+      <el-tooltip :content="t('recents.title')" placement="bottom">
+        <el-button text :icon="Clock" @click="recentDrawer = true" />
+      </el-tooltip>
       <el-dropdown trigger="click" @command="handleCommand">
         <span class="user-trigger">
           <el-icon><User /></el-icon>
@@ -28,16 +32,21 @@
         </template>
       </el-dropdown>
     </div>
+    <RecentDrawer v-model="recentDrawer" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { Clock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import Breadcrumb from './Breadcrumb.vue'
+import PinButton from './PinButton.vue'
 import ThemeSwitcher from './ThemeSwitcher.vue'
 import LanguageSwitcher from './LanguageSwitcher.vue'
+import RecentDrawer from './RecentDrawer.vue'
 
 defineProps<{ collapsed: boolean }>()
 defineEmits<{ (e: 'toggle'): void }>()
@@ -45,6 +54,7 @@ defineEmits<{ (e: 'toggle'): void }>()
 const { t } = useI18n()
 const auth = useAuthStore()
 const router = useRouter()
+const recentDrawer = ref(false)
 
 function handleCommand(cmd: string) {
   if (cmd === 'logout') {

@@ -19,10 +19,28 @@ export interface AuditListResult {
   page_size: number
 }
 
+export interface AuditFilter {
+  action?: string
+  actor_id?: string
+  resource?: string
+  payload_search?: string
+  from?: string
+  to?: string
+}
+
 export const auditApi = {
-  list: (token: string, action?: string, page = 1, page_size = 50) =>
+  list: (token: string, filter: AuditFilter = {}, page = 1, pageSize = 50) =>
     call<AuditListResult>('audit_list', {
       token,
-      query: { action: action || null, actor_id: null, page, page_size }
+      query: {
+        action: filter.action || null,
+        actor_id: filter.actor_id || null,
+        resource: filter.resource || null,
+        payload_search: filter.payload_search || null,
+        from: filter.from || null,
+        to: filter.to || null,
+        page,
+        page_size: pageSize
+      }
     })
 }

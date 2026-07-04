@@ -51,12 +51,14 @@ import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { usePaletteStore } from '@/stores/palette'
 import { useAuthStore } from '@/stores/auth'
+import { useRecentStore } from '@/stores/recent'
 
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 const store = usePaletteStore()
 const auth = useAuthStore()
+const recent = useRecentStore()
 
 interface PaletteItem {
   label: string
@@ -97,7 +99,15 @@ const items = computed<PaletteItem[]>(() => {
 
 const filtered = computed(() => {
   const q = query.value.trim().toLowerCase()
-  if (!q) return items.value.slice(0, 12)
+  if (!q) {
+    // Empty query: surface favorites first, then the rest.  This makes the
+    // palette feel like a "quick launcher" without typing.
+    const favs = recent.favoritesList
+      .map((p) => items.value.find((it) => it.path === p))
+      .filter((x): x is PaletteItem => !!x)
+    const rest = items.value.filter((it) => !recent.isFavorite(it.path))
+    return [...favs, ...rest].slice(0, 12)
+  }
   return items.value
     .filter((it) => it.label.toLowerCase().includes(q) || it.path.toLowerCase().includes(q))
     .slice(0, 20)

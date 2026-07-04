@@ -31,11 +31,14 @@ export function useLocale() {
   }
   function setLocale(code: string) {
     if (!SUPPORTED_LOCALES.includes(code)) {
-      // Set a non-bundled locale by registering it as an alias of fallback first,
-      // then mergeMessages fills the keys.
-      if (!i18n.global.availableLocales.includes(code)) {
-        i18n.global.setLocaleMessage(code, { ...(i18n.global.messages.value['en-US'] as any) })
-      }
+      // Always pre-seed with en-US so untranslated keys resolve to English.
+      // We do this even for already-registered custom locales — vue-i18n
+      // keeps the message set across hot reloads and we want the merge in
+      // the following apply() to be authoritative.  Existing keys are
+      // preserved by spreading `existing` after `enUS`.
+      const enUS = (i18n.global.messages.value['en-US'] as Record<string, string>) || {}
+      const existing = (i18n.global.messages.value[code] as Record<string, string>) || {}
+      i18n.global.setLocaleMessage(code, { ...enUS, ...existing })
     }
     i18n.global.locale.value = code
   }

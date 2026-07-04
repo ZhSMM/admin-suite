@@ -244,10 +244,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Lock, Unlock, DocumentCopy } from '@element-plus/icons-vue'
+import { useToolRecorder } from '@/composables/useToolRecorder'
 
 const { t } = useI18n()
 
@@ -640,4 +641,30 @@ randomAesKey()
 randomGcmIv()
 randomCbcKey()
 randomCbcIv()
+
+// Record sanitised snapshots.  Cryptographic tools deliberately do NOT
+// persist keys / IVs / private key material — only the algorithm + a
+// truncated plaintext head, which is enough to see "what I did last time"
+// without ever leaking a secret.
+useToolRecorder('/tools/crypto', () => ({
+  algo: algo.value,
+  aesPlainHead: aesPlain.value.slice(0, 80),
+  cbcPlainHead: cbcPlain.value.slice(0, 80),
+  rsaPlainHead: rsaPlain.value.slice(0, 80),
+  caesarShift: caesarShift.value
+}))
+
+onMounted(() => {
+  window.addEventListener('admin-suite:restore-snapshot', onRestore as EventListener)
+})
+function onRestore(ev: Event) {
+  const detail = (ev as CustomEvent<{ inputs: Record<string, unknown> }>).detail
+  const inputs = detail?.inputs || {}
+  if (typeof inputs.algo === 'string') algo.value = inputs.algo as typeof algo.value
+  if (typeof inputs.aesPlainHead === 'string') aesPlain.value = inputs.aesPlainHead
+  if (typeof inputs.cbcPlainHead === 'string') cbcPlain.value = inputs.cbcPlainHead
+  if (typeof inputs.rsaPlainHead === 'string') rsaPlain.value = inputs.rsaPlainHead
+  if (typeof inputs.caesarShift === 'number') caesarShift.value = inputs.caesarShift
+  ElMessage.success(t('recents.title'))
+}
 </script>

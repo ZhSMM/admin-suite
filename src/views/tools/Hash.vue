@@ -77,11 +77,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, UploadFilled } from '@element-plus/icons-vue'
 import md5 from 'md5'
+import { useToolRecorder } from '@/composables/useToolRecorder'
 
 const { t } = useI18n()
 
@@ -205,6 +206,28 @@ async function onFile(uploadFile: any) {
 }
 
 watch(hmacKey, () => computeHmac())
+
+// Record sanitised snapshots so users can re-run their last hash job.
+// We deliberately omit the file input (binary blobs blow up storage) and
+// the HMAC key (it's a secret).  Algorithm + text is plenty for "resume".
+useToolRecorder('/tools/hash', () => ({
+  algorithm: 'all',
+  textHead: text.value.slice(0, 80),
+  hasFile: !!fileBytes.value,
+  fileName: fileName.value,
+  hmacOn: !!hmacKey.value
+}))
+
+// Listen for restore-snapshot events from the recent drawer.  We only
+// re-apply the parts we stored (algorithm + text) — never the file.
+onMounted(() => {
+  window.addEventListener('admin-suite:restore-snapshot', onRestore as EventListener)
+})
+function onRestore(ev: Event) {
+  const detail = (ev as CustomEvent<{ inputs: Record<string, unknown> }>).detail
+  if (detail?.inputs?.textHead) text.value = String(detail.inputs.textHead)
+  ElMessage.success(t('recents.title'))
+}
 
 async function copy(value: string) {
   if (!value) return
