@@ -13,6 +13,7 @@ export interface SettingUpdate {
 
 export const settingsApi = {
   list: (token: string) => invoke<Setting[]>('settings_list', { token }),
+  listPublic: (token: string) => invoke<Setting[]>('settings_list_public', { token }),
   set: (token: string, updates: SettingUpdate[]) =>
     invoke<Setting[]>('settings_set', { token, updates })
 }

@@ -765,6 +765,7 @@ fn map_llm_error(e: LlmError) -> AppError {
 fn pick_adapter(kind: &str) -> Box<dyn LlmProvider> {
     match kind {
         "anthropic" => Box::new(llm::providers::anthropic::Anthropic),
+        "google" => Box::new(llm::providers::google::Google),
         "custom" => Box::new(llm::providers::custom::CustomAdapter),
         // 'openai_compat' and 'fallback' both speak the OpenAI schema.
         _ => Box::new(llm::providers::openai_compat::OpenAiCompat),

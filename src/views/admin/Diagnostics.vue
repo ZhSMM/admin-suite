@@ -111,6 +111,9 @@
         <el-button :disabled="!detail.report?.detail" @click="copyStack">
           {{ t('diagnostics.copy') }}
         </el-button>
+        <el-button type="success" :disabled="!detail.report" @click="aiExplain">
+          {{ t('diagnostics.aiExplain') }}
+        </el-button>
         <el-button type="primary" @click="detail.visible = false">
           {{ t('common.close') }}
         </el-button>
@@ -122,6 +125,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -131,6 +135,7 @@ import type { CrashReport, CrashKind } from '@/api/crash'
 const { t, locale } = useI18n()
 const auth = useAuthStore()
 const crash = useCrashStore()
+const router = useRouter()
 
 const detail = reactive<{
   visible: boolean
@@ -196,6 +201,24 @@ const copyStack = async () => {
   if (!detail.report?.detail) return
   await navigator.clipboard.writeText(detail.report.detail)
   ElMessage.success(t('diagnostics.copied'))
+}
+
+const aiExplain = () => {
+  if (!detail.report) return
+  const r = detail.report
+  // Build a payload that explains exactly what the user is looking at.
+  const lines = [
+    `Kind: ${r.kind}`,
+    `App version: ${r.app_version ?? 'unknown'}`,
+    `Source: ${r.source ?? 'unknown'}`,
+    `Message: ${r.message}`,
+    '',
+    r.detail ? `Detail:\n${r.detail}` : 'Detail: (none)'
+  ]
+  router.push({
+    name: 'ai-explain',
+    state: { prefill: lines.join('\n') }
+  })
 }
 
 onMounted(() => reload())

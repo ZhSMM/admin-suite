@@ -77,6 +77,80 @@
         </el-form-item>
       </el-form>
     </el-card>
+
+    <!-- AI -->
+    <el-card shadow="never" style="margin-top: 16px">
+      <template #header>
+        <strong>{{ t('settings.section.ai') }}</strong>
+      </template>
+      <el-alert :title="t('settings.ai.help')" type="info" :closable="false" style="margin-bottom: 12px" />
+      <el-form label-width="240px">
+        <el-form-item :label="t('settings.ai.defaultChat')">
+          <el-select
+            v-model="form.ai_default_chat_provider"
+            :placeholder="t('settings.ai.pickProvider')"
+            style="width: 200px"
+            clearable
+          >
+            <el-option
+              v-for="p in llm.enabledProviders"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
+            />
+          </el-select>
+          <el-select
+            v-model="form.ai_default_chat_model"
+            :placeholder="t('settings.ai.pickModel')"
+            style="width: 240px; margin-left: 8px"
+            :disabled="!form.ai_default_chat_provider"
+            clearable
+          >
+            <el-option
+              v-for="m in chatModelsFor(form.ai_default_chat_provider)"
+              :key="m.id"
+              :label="m.display_name"
+              :value="m.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('settings.ai.defaultTranslate')">
+          <el-select
+            v-model="form.ai_default_translate_provider"
+            :placeholder="t('settings.ai.pickProvider')"
+            style="width: 200px"
+            clearable
+          >
+            <el-option
+              v-for="p in llm.enabledProviders"
+              :key="p.id"
+              :label="p.name"
+              :value="p.id"
+            />
+          </el-select>
+          <el-select
+            v-model="form.ai_default_translate_model"
+            :placeholder="t('settings.ai.pickModel')"
+            style="width: 240px; margin-left: 8px"
+            :disabled="!form.ai_default_translate_provider"
+            clearable
+          >
+            <el-option
+              v-for="m in chatModelsFor(form.ai_default_translate_provider)"
+              :key="m.id"
+              :label="m.display_name"
+              :value="m.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('settings.ai.localFirst')">
+          <el-switch v-model="form.ai_local_first" />
+          <small style="margin-left: 12px; color: var(--text-secondary)">
+            {{ t('settings.ai.localFirstHelp') }}
+          </small>
+        </el-form-item>
+      </el-form>
+    </el-card>
   </div>
 </template>
 
@@ -86,10 +160,12 @@ import { ElMessage } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useLlmStore } from '@/stores/llm'
 import { settingsApi, type Setting, type SettingUpdate } from '@/api/settings'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const llm = useLlmStore()
 
 const saving = ref(false)
 
@@ -102,8 +178,17 @@ const form = reactive({
   auth_lockout_minutes: 15,
   backup_auto_on_start: true,
   backup_keep_count: 10,
-  ui_command_palette: true
+  ui_command_palette: true,
+  ai_default_chat_provider: '',
+  ai_default_chat_model: '',
+  ai_default_translate_provider: '',
+  ai_default_translate_model: '',
+  ai_local_first: false
 })
+
+function chatModelsFor(providerId: string) {
+  return providerId ? llm.modelsFor(providerId) : []
+}
 
 function apply(rows: Setting[]) {
   for (const r of rows) {
@@ -116,6 +201,11 @@ function apply(rows: Setting[]) {
       case 'backup.auto_on_start': form.backup_auto_on_start = v === 'true'; break
       case 'backup.keep_count': form.backup_keep_count = parseInt(v, 10) || 10; break
       case 'ui.command_palette': form.ui_command_palette = v === 'true'; break
+      case 'ai.default_chat_provider': form.ai_default_chat_provider = v; break
+      case 'ai.default_chat_model': form.ai_default_chat_model = v; break
+      case 'ai.default_translate_provider': form.ai_default_translate_provider = v; break
+      case 'ai.default_translate_model': form.ai_default_translate_model = v; break
+      case 'ai.local_first': form.ai_local_first = v === 'true'; break
     }
   }
 }
@@ -124,6 +214,10 @@ async function reload() {
   try {
     const rows = await settingsApi.list(auth.token)
     apply(rows)
+    // Ensure providers are loaded so the dropdowns render.
+    if (llm.providers.length === 0) {
+      await llm.loadAll(auth.token || '')
+    }
   } catch (e) {
     ElMessage.error((e as Error).message)
   }
@@ -139,7 +233,12 @@ async function save() {
       { key: 'auth.lockout_minutes', value: String(form.auth_lockout_minutes) },
       { key: 'backup.auto_on_start', value: form.backup_auto_on_start ? 'true' : 'false' },
       { key: 'backup.keep_count', value: String(form.backup_keep_count) },
-      { key: 'ui.command_palette', value: form.ui_command_palette ? 'true' : 'false' }
+      { key: 'ui.command_palette', value: form.ui_command_palette ? 'true' : 'false' },
+      { key: 'ai.default_chat_provider', value: form.ai_default_chat_provider },
+      { key: 'ai.default_chat_model', value: form.ai_default_chat_model },
+      { key: 'ai.default_translate_provider', value: form.ai_default_translate_provider },
+      { key: 'ai.default_translate_model', value: form.ai_default_translate_model },
+      { key: 'ai.local_first', value: form.ai_local_first ? 'true' : 'false' }
     ]
     const rows = await settingsApi.set(auth.token, updates)
     apply(rows)

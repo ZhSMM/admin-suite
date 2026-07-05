@@ -90,9 +90,12 @@ const router = useRouter()
 const auth = useAuthStore()
 const llm = useLlmStore()
 
-const providerId = ref<string>(llm.defaultProviderId ?? '')
-const modelId = ref<string>(llm.defaultModelId ?? '')
-const input = ref('')
+const providerId = ref<string>(llm.effectiveProviderId ?? '')
+const modelId = ref<string>(llm.effectiveModelId ?? '')
+// Prefill from Command Palette `? <text>` or any other router state handoff.
+const input = ref<string>(
+  (history.state && typeof history.state.prefill === 'string') ? history.state.prefill : ''
+)
 const messages = ref<ChatMessage[]>([])
 const status = ref<'idle' | 'sending'>('idle')
 

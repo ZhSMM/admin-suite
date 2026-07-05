@@ -491,18 +491,21 @@ mod tests {
         let db = Db::open(&p).expect("open test db");
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
         let applied = run_migrations(&db, &dir).expect("migrations apply");
-        // We seeded V1..V8 — assert the count is at least 8 so a typo in V9
+        // We seeded V1..V11 — assert the count is at least 11 so a typo in V9/V10/V11
         // can't silently pass CI either.
         assert!(
-            applied.len() >= 8,
-            "expected at least 8 migrations applied, got {}",
+            applied.len() >= 11,
+            "expected at least 11 migrations applied, got {}",
             applied.len()
         );
         // Spot-check: app_state and the new menus rows from V7 exist.
         db.with_conn(|c| {
             let has_state: i64 =
                 c.query_row("SELECT COUNT(*) FROM app_state", [], |r| r.get(0))?;
-            assert!(has_state >= 9, "app_state should have at least 9 rows");
+            assert!(
+                has_state >= 14,
+                "app_state should have at least 14 rows (V7+V11 seeded 9+5)",
+            );
             let m_settings: i64 = c.query_row(
                 "SELECT COUNT(*) FROM menus WHERE code = 'system.settings'",
                 [],

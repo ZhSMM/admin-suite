@@ -11,6 +11,10 @@
           <el-icon><Download /></el-icon>
           {{ t('locales.export') }}
         </el-button>
+        <el-button type="success" @click="openAiFill">
+          <el-icon><MagicStick /></el-icon>
+          {{ t('locales.aiFill.button') }}
+        </el-button>
         <input ref="fileInput" type="file" accept="application/json" hidden @change="onFile" />
       </div>
     </div>
@@ -50,6 +54,9 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <!-- AI fill missing keys dialog -->
+    <LocaleAiFill ref="aiFillRef" :items="items" />
 
     <!-- Export dialog: pick source + target code, see the result -->
     <el-dialog v-model="exportDialog.open" :title="t('locales.exportDialog')" width="640">
@@ -92,10 +99,11 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Upload, Download } from '@element-plus/icons-vue'
+import { Upload, Download, MagicStick } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
 import { resourcesApi, type Resource } from '@/api/resources'
+import LocaleAiFill from './LocaleAiFill.vue'
 
 const { t, locale: currentLocale } = useI18n()
 const auth = useAuthStore()
@@ -151,6 +159,21 @@ async function remove(row: Resource) {
 }
 
 const fileInput = ref<HTMLInputElement>()
+const aiFillRef = ref<InstanceType<typeof LocaleAiFill> | null>(null)
+
+function openAiFill() {
+  if (!items.value.length) {
+    ElMessage.warning(t('locales.noLocale'))
+    return
+  }
+  const active = items.value.find((it) => it.active) ?? items.value[0]
+  // Default source = active locale, target = the first non-active one with the
+  // most missing keys (heuristic: pick the second item if available).
+  const sourceCode = active.code
+  const targetCode = items.value.find((it) => it.code !== sourceCode)?.code ?? sourceCode
+  aiFillRef.value?.open(sourceCode, targetCode)
+}
+
 function triggerImport() {
   fileInput.value?.click()
 }

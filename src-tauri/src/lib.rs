@@ -411,6 +411,15 @@ fn settings_set(
     settings_cmd::set_many(&state.db, &state.sessions, &token, updates).map_err(map_err)
 }
 
+#[tauri::command]
+fn settings_list_public(
+    state: State<AppState>,
+    token: String,
+) -> Result<Vec<settings_cmd::Setting>, AppError> {
+    let _t = metrics::time(&state.metrics, "settings_list_public");
+    settings_cmd::list_public(&state.db, &state.sessions, &token).map_err(map_err)
+}
+
 // =============================================================
 // Backups
 // =============================================================
@@ -723,6 +732,7 @@ pub fn run() {
             migrate_status,
             app_info,
             settings_list,
+            settings_list_public,
             settings_set,
             backup_list,
             backup_create,

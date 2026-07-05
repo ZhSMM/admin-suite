@@ -130,6 +130,24 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, permission: 'llm:use', title: 'menu.ai.chat' }
       },
       {
+        path: 'ai/translate',
+        name: 'ai-translate',
+        component: () => import('@/views/ai/Translate.vue'),
+        meta: { requiresAuth: true, permission: 'llm:use', title: 'menu.ai.translate' }
+      },
+      {
+        path: 'ai/explain',
+        name: 'ai-explain',
+        component: () => import('@/views/ai/Explain.vue'),
+        meta: { requiresAuth: true, permission: 'llm:use', title: 'menu.ai.explain' }
+      },
+      {
+        path: 'ai/summarize',
+        name: 'ai-summarize',
+        component: () => import('@/views/ai/Summarize.vue'),
+        meta: { requiresAuth: true, permission: 'llm:use', title: 'menu.ai.summarize' }
+      },
+      {
         path: 'tools/base',
         name: 'tool-base',
         component: () => import('@/views/tools/BaseConvert.vue'),

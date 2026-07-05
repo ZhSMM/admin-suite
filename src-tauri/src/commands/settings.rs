@@ -56,6 +56,43 @@ pub fn list(db: &Db, sessions: &SessionStore, token: &str) -> AppResult<Vec<Sett
     })
 }
 
+/// Keys that the *frontend* (any authenticated user) is allowed to read.
+/// Anything in `app_state` that's sensitive (lockout minutes, login max
+/// failures, password min length, etc.) stays gated by `settings:manage`.
+const PUBLIC_KEYS: &[&str] = &[
+    "ui.default_theme",
+    "ui.default_locale",
+    "ui.command_palette",
+    "ai.default_chat_provider",
+    "ai.default_chat_model",
+    "ai.default_translate_provider",
+    "ai.default_translate_model",
+    "ai.local_first",
+];
+
+/// Public read endpoint for non-secret settings.  Returns only the
+/// `PUBLIC_KEYS` allowlist — no permission required beyond a valid session.
+pub fn list_public(db: &Db, sessions: &SessionStore, token: &str) -> AppResult<Vec<Setting>> {
+    let _user = sessions.lookup(token)?;
+    let placeholders = PUBLIC_KEYS
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT key, value, updated_at FROM app_state WHERE key IN ({}) \
+         ORDER BY key",
+        placeholders
+    );
+    db.with_conn(|c| {
+        let mut stmt = c.prepare(&sql)?;
+        let v = stmt
+            .query_map(rusqlite::params_from_iter(PUBLIC_KEYS.iter()), row_to_setting)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(v)
+    })
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SettingUpdate {
     pub key: String,
@@ -132,11 +169,25 @@ fn validate(key: &str, value: &str) -> AppResult<()> {
                 )));
             }
         }
-        "ui.command_palette" => {
+        "ui.command_palette" | "ai.local_first" => {
             if !matches!(value, "true" | "false") {
-                return Err(AppError::Validation(
-                    "ui.command_palette must be 'true' or 'false'".into(),
-                ));
+                return Err(AppError::Validation(format!(
+                    "{} must be 'true' or 'false'",
+                    key
+                )));
+            }
+        }
+        "ai.default_chat_provider"
+        | "ai.default_chat_model"
+        | "ai.default_translate_provider"
+        | "ai.default_translate_model" => {
+            // Empty allowed — represents "no global default yet"; the frontend
+            // falls back to its per-user localStorage pick in that case.
+            if value.len() > 128 {
+                return Err(AppError::Validation(format!(
+                    "{} must be <= 128 characters",
+                    key
+                )));
             }
         }
         _ => {

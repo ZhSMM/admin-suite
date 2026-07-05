@@ -48,7 +48,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, ChatLineRound } from '@element-plus/icons-vue'
 import { usePaletteStore } from '@/stores/palette'
 import { useAuthStore } from '@/stores/auth'
 import { useRecentStore } from '@/stores/recent'
@@ -98,7 +98,19 @@ const items = computed<PaletteItem[]>(() => {
 })
 
 const filtered = computed(() => {
-  const q = query.value.trim().toLowerCase()
+  const q = query.value.trim()
+  // "Ask AI" — type `? ` (question mark + space) to route the rest of the
+  // query to the AI chat tool as a pre-filled message.
+  if (q.startsWith('?') && q.length > 1) {
+    const askText = q.slice(1).trim()
+    return [{
+      label: askText ? `${t('palette.askAi')}: ${askText}` : t('palette.askAi'),
+      hint: '/ai/chat',
+      path: '/ai/chat',
+      icon: ChatLineRound,
+      kind: 'tool' as const
+    }]
+  }
   if (!q) {
     // Empty query: surface favorites first, then the rest.  This makes the
     // palette feel like a "quick launcher" without typing.
@@ -109,14 +121,20 @@ const filtered = computed(() => {
     return [...favs, ...rest].slice(0, 12)
   }
   return items.value
-    .filter((it) => it.label.toLowerCase().includes(q) || it.path.toLowerCase().includes(q))
+    .filter((it) => it.label.toLowerCase().includes(q.toLowerCase()) || it.path.toLowerCase().includes(q.toLowerCase()))
     .slice(0, 20)
 })
 
 watch(filtered, () => { activeIndex.value = 0 })
 
 function go(item: PaletteItem) {
-  router.push(item.path).then(() => {
+  const q = query.value.trim()
+  // vue-router's HistoryState is `Record<string, any>`; we only set `prefill`.
+  const state: { prefill?: string } = {}
+  if (q.startsWith('?') && q.length > 1) {
+    state.prefill = q.slice(1).trim()
+  }
+  router.push({ path: item.path, state }).then(() => {
     store.hide()
     query.value = ''
   }).catch(() => {
