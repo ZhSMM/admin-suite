@@ -11,6 +11,26 @@
         />
       </el-header>
       <el-main class="layout-main">
+        <div v-if="updaterBanner.visible" class="updater-banner">
+          <el-alert
+            type="info"
+            show-icon
+            :closable="true"
+            @close="updater.dismiss()"
+          >
+            <template #default>
+              <div class="banner-row">
+                <span class="banner-msg">
+                  {{ t('updater.available') }}
+                  <code class="banner-ver">{{ updater.manifest?.latest_version }}</code>
+                </span>
+                <el-button type="primary" size="small" @click="goUpdater">
+                  {{ t('updater.download') }}
+                </el-button>
+              </div>
+            </template>
+          </el-alert>
+        </div>
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -23,12 +43,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import Sidebar from '@/components/Sidebar.vue'
 import HeaderBar from '@/components/HeaderBar.vue'
 import CommandPalette from '@/components/CommandPalette.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useUpdaterStore } from '@/stores/updater'
 
+const { t } = useI18n()
+const router = useRouter()
+const auth = useAuthStore()
+const updater = useUpdaterStore()
 const collapsed = ref(false)
+
+// Show banner only when an update is available AND the user has the perm
+// (so non-admin users never see it). Dismissable per-session via dismiss().
+const updaterBanner = computed(() => ({
+  visible: updater.status === 'available' && auth.hasPermission('updater:check')
+}))
+
+const goUpdater = () => router.push('/system/updater')
+
+onMounted(() => {
+  // Background auto-check once per session.  We only run if the updater
+  // perm is held — the Updater page itself re-checks on mount.
+  if (auth.isAuthenticated && auth.hasPermission('updater:check') && updater.status === 'idle') {
+    void updater.check(auth.token || '')
+  }
+})
 </script>
 
 <style scoped lang="scss">

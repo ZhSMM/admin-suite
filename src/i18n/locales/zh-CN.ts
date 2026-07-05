@@ -118,6 +118,9 @@ export default {
   'menu.tools': '工具',
   'menu.settings': '系统设置',
   'menu.backups': '数据备份',
+  'menu.monitoring': '性能监控',
+  'menu.diagnostics': '崩溃诊断',
+  'menu.updater': '在线更新',
   'menu.tools.base': '进制转换',
   'menu.tools.json': 'JSON 格式化',
   'menu.tools.datetime': '时间日期',
@@ -639,5 +642,64 @@ export default {
   'recents.clearAll': '清空全部',
   'recents.unpin': '取消收藏',
   'recents.pin': '收藏当前页',
-  'recents.recentHint': '点条目回到该工具并恢复输入。'
+  'recents.recentHint': '点条目回到该工具并恢复输入。',
+  // ============================================================
+  // monitoring (IPC 性能指标)
+  // ============================================================
+  'monitoring.title': 'IPC 性能监控',
+  'monitoring.autoRefresh': '自动刷新（3秒）',
+  'monitoring.clear': '清零计数器',
+  'monitoring.clearConfirm': '清空所有 IPC 性能计数器？这不会影响日志或审计。',
+  'monitoring.cleared': '计数器已清零。',
+  'monitoring.emptyTitle': '尚无 IPC 调用记录',
+  'monitoring.emptyDesc': '使用一下应用（打开任意页面、点击几下），指标会自动出现。',
+  'monitoring.col.command': '命令',
+  'monitoring.col.count': '调用次数',
+  'monitoring.col.last': '最近',
+  'monitoring.col.avg': '平均',
+  'monitoring.col.max': '最大',
+  'monitoring.col.total': '总计',
+  'monitoring.col.errors': '错误数',
+  'monitoring.col.sparkline': '近期延迟',
+
+  // ============================================================
+  // diagnostics (崩溃诊断)
+  // ============================================================
+  'diagnostics.title': '崩溃诊断',
+  'diagnostics.refresh': '刷新',
+  'diagnostics.empty': '未记录到崩溃。这是个好事。',
+  'diagnostics.col.ts': '时间',
+  'diagnostics.col.kind': '类型',
+  'diagnostics.col.message': '描述',
+  'diagnostics.col.source': '来源',
+  'diagnostics.col.appVersion': '应用版本',
+  'diagnostics.view': '详情',
+  'diagnostics.copy': '复制栈',
+  'diagnostics.copySuccess': '已复制',
+  'diagnostics.clear': '清空',
+  'diagnostics.clearConfirm': '删除所有崩溃记录？不可恢复。',
+  'diagnostics.cleared': '崩溃日志已清空。',
+  'diagnostics.copied': '栈信息已复制到剪贴板。',
+  'diagnostics.kind.rust_panic': 'Rust 崩溃',
+  'diagnostics.kind.frontend_error': '前端错误',
+  'diagnostics.kind.frontend_unhandled_rejection': '前端未处理的 Promise 拒绝',
+
+  // ============================================================
+  // updater (在线更新)
+  // ============================================================
+  'updater.title': '在线更新',
+  'updater.check': '检查更新',
+  'updater.checking': '检查中…',
+  'updater.current': '当前版本',
+  'updater.latest': '最新版本',
+  'updater.upToDate': '已是最新版本。',
+  'updater.available': '发现新版本，可选择升级。',
+  'updater.required': '发现必要更新，请先升级再使用。',
+  'updater.download': '下载并安装',
+  'updater.downloading': '下载中…',
+  'updater.ready': '升级已就绪，重启后生效。',
+  'updater.install': '重启安装',
+  'updater.installing': '安装中…',
+  'updater.error': '更新失败',
+  'updater.disabled': '本版本未启用自动更新。'
 }

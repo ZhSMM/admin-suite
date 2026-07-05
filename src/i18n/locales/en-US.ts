@@ -97,6 +97,9 @@ export default {
   'menu.tools': 'Tools',
   'menu.settings': 'Settings',
   'menu.backups': 'Backups',
+  'menu.monitoring': 'Monitoring',
+  'menu.diagnostics': 'Diagnostics',
+  'menu.updater': 'Updates',
   'menu.tools.base': 'Base Converter',
   'menu.tools.json': 'JSON Formatter',
   'menu.tools.datetime': 'Date & Time',
@@ -618,5 +621,65 @@ export default {
   'recents.clearAll': 'Clear all',
   'recents.unpin': 'Unpin',
   'recents.pin': 'Pin current page',
-  'recents.recentHint': 'Tap an entry to reopen the tool with that input restored.'
+  'recents.recentHint': 'Tap an entry to reopen the tool with that input restored.',
+
+  // ============================================================
+  // monitoring (IPC perf metrics)
+  // ============================================================
+  'monitoring.title': 'IPC Performance',
+  'monitoring.autoRefresh': 'Auto refresh (3s)',
+  'monitoring.clear': 'Reset counters',
+  'monitoring.clearConfirm': 'Reset all IPC metrics? This does not affect logs or audits.',
+  'monitoring.cleared': 'Counters reset.',
+  'monitoring.emptyTitle': 'No IPC activity yet',
+  'monitoring.emptyDesc': 'Interact with the app (open a page, click around) and the metrics will populate.',
+  'monitoring.col.command': 'Command',
+  'monitoring.col.count': 'Calls',
+  'monitoring.col.last': 'Last',
+  'monitoring.col.avg': 'Avg',
+  'monitoring.col.max': 'Max',
+  'monitoring.col.total': 'Total',
+  'monitoring.col.errors': 'Errors',
+  'monitoring.col.sparkline': 'Recent latency',
+
+  // ============================================================
+  // diagnostics (crash log viewer)
+  // ============================================================
+  'diagnostics.title': 'Crash Diagnostics',
+  'diagnostics.refresh': 'Refresh',
+  'diagnostics.empty': 'No crashes recorded. That is a good thing.',
+  'diagnostics.col.ts': 'When',
+  'diagnostics.col.kind': 'Kind',
+  'diagnostics.col.message': 'Message',
+  'diagnostics.col.source': 'Source',
+  'diagnostics.col.appVersion': 'App version',
+  'diagnostics.view': 'Details',
+  'diagnostics.copy': 'Copy stack',
+  'diagnostics.copySuccess': 'Copied',
+  'diagnostics.clear': 'Clear all',
+  'diagnostics.clearConfirm': 'Delete every crash record? This cannot be undone.',
+  'diagnostics.cleared': 'Crash log cleared.',
+  'diagnostics.copied': 'Stack copied to clipboard.',
+  'diagnostics.kind.rust_panic': 'Rust panic',
+  'diagnostics.kind.frontend_error': 'Frontend error',
+  'diagnostics.kind.frontend_unhandled_rejection': 'Frontend unhandled rejection',
+
+  // ============================================================
+  // updater (auto-update UI)
+  // ============================================================
+  'updater.title': 'Application Updates',
+  'updater.check': 'Check for updates',
+  'updater.checking': 'Checking…',
+  'updater.current': 'Current version',
+  'updater.latest': 'Latest version',
+  'updater.upToDate': 'You are on the latest version.',
+  'updater.available': 'A new version is available.',
+  'updater.required': 'A required update is available — install before continuing.',
+  'updater.download': 'Download & install',
+  'updater.downloading': 'Downloading…',
+  'updater.ready': 'Restart required to finish installation.',
+  'updater.install': 'Restart now',
+  'updater.installing': 'Installing…',
+  'updater.error': 'Update failed',
+  'updater.disabled': 'Auto-update is disabled in this build.'
 }

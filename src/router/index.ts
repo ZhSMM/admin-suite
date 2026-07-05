@@ -88,6 +88,24 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, permission: 'backup:manage', title: 'menu.backups' }
       },
       {
+        path: 'system/monitoring',
+        name: 'monitoring',
+        component: () => import('@/views/admin/Monitoring.vue'),
+        meta: { requiresAuth: true, permission: 'monitoring:read', title: 'menu.monitoring' }
+      },
+      {
+        path: 'system/diagnostics',
+        name: 'diagnostics',
+        component: () => import('@/views/admin/Diagnostics.vue'),
+        meta: { requiresAuth: true, permission: 'diagnostics:read', title: 'menu.diagnostics' }
+      },
+      {
+        path: 'system/updater',
+        name: 'updater',
+        component: () => import('@/views/admin/Updater.vue'),
+        meta: { requiresAuth: true, permission: 'updater:check', title: 'menu.updater' }
+      },
+      {
         path: 'tools/base',
         name: 'tool-base',
         component: () => import('@/views/tools/BaseConvert.vue'),

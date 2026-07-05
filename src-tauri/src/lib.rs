@@ -21,12 +21,15 @@ use crate::auth::session::SessionStore;
 use crate::commands::auth as auth_cmd;
 use crate::commands::audit as audit_cmd;
 use crate::commands::backup as backup_cmd;
+use crate::commands::crash::{self as crash_cmd, CrashStore};
 use crate::commands::menus as menus_cmd;
+use crate::commands::metrics::{self as metrics, SharedMetrics};
 use crate::commands::migrate_cmd as migrate_cmd;
 use crate::commands::permissions as perm_cmd;
 use crate::commands::resources as res_cmd;
 use crate::commands::roles as roles_cmd;
 use crate::commands::settings as settings_cmd;
+use crate::commands::updater as updater_cmd;
 use crate::commands::users as users_cmd;
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
@@ -37,6 +40,13 @@ pub struct AppState {
     pub sessions: SessionStore,
     pub migrations_dir: PathBuf,
     pub data_dir: PathBuf,
+    /// IPC performance registry. Every command starts with a `metrics::time`
+    /// guard that records its latency on drop.
+    pub metrics: SharedMetrics,
+    /// Crash diagnostics store. Persists one JSON per incident to
+    /// `<data_dir>/crashes/`. The panic hook is installed in `run()` so every
+    /// panic that escapes a command is captured.
+    pub crashes: Arc<CrashStore>,
 }
 
 const DEFAULT_ADMIN_USERNAME: &str = "admin";
@@ -61,17 +71,20 @@ fn auth_login(
     username: String,
     password: String,
 ) -> Result<auth_cmd::LoginResult, AppError> {
+    let _t = metrics::time(&state.metrics, "auth_login");
     auth_cmd::login(&state.db, &state.sessions, &username, &password).map_err(map_err)
 }
 
 #[tauri::command]
 fn auth_logout(state: State<AppState>, token: String) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "auth_logout");
     auth_cmd::logout(&state.sessions, &token);
     Ok(())
 }
 
 #[tauri::command]
 fn auth_me(state: State<AppState>, token: String) -> Result<models::UserSafe, AppError> {
+    let _t = metrics::time(&state.metrics, "auth_me");
     auth_cmd::current_user(&state.db, &state.sessions, &token).map_err(map_err)
 }
 
@@ -81,6 +94,7 @@ fn users_list(
     token: String,
     query: Option<models::UserListQuery>,
 ) -> Result<models::UserListResult, AppError> {
+    let _t = metrics::time(&state.metrics, "users_list");
     users_cmd::list(&state.db, &state.sessions, &token, query.unwrap_or(models::UserListQuery {
         keyword: None, status: None, role_id: None, page: None, page_size: None,
     }))
@@ -89,6 +103,7 @@ fn users_list(
 
 #[tauri::command]
 fn users_get(state: State<AppState>, token: String, id: String) -> Result<models::UserSafe, AppError> {
+    let _t = metrics::time(&state.metrics, "users_get");
     users_cmd::get(&state.db, &state.sessions, &token, &id).map_err(map_err)
 }
 
@@ -98,6 +113,7 @@ fn users_create(
     token: String,
     payload: models::UserCreate,
 ) -> Result<models::UserSafe, AppError> {
+    let _t = metrics::time(&state.metrics, "users_create");
     users_cmd::create(&state.db, &state.sessions, &token, payload).map_err(map_err)
 }
 
@@ -107,21 +123,25 @@ fn users_update(
     token: String,
     payload: models::UserUpdate,
 ) -> Result<models::UserSafe, AppError> {
+    let _t = metrics::time(&state.metrics, "users_update");
     users_cmd::update(&state.db, &state.sessions, &token, payload).map_err(map_err)
 }
 
 #[tauri::command]
 fn users_delete(state: State<AppState>, token: String, id: String) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "users_delete");
     users_cmd::delete(&state.db, &state.sessions, &token, &id).map_err(map_err)
 }
 
 #[tauri::command]
 fn roles_list(state: State<AppState>, token: String) -> Result<Vec<models::Role>, AppError> {
+    let _t = metrics::time(&state.metrics, "roles_list");
     roles_cmd::list(&state.db, &state.sessions, &token).map_err(map_err)
 }
 
 #[tauri::command]
 fn roles_get(state: State<AppState>, token: String, id: String) -> Result<models::Role, AppError> {
+    let _t = metrics::time(&state.metrics, "roles_get");
     roles_cmd::get(&state.db, &state.sessions, &token, &id).map_err(map_err)
 }
 
@@ -131,6 +151,7 @@ fn roles_create(
     token: String,
     payload: models::RoleCreate,
 ) -> Result<models::Role, AppError> {
+    let _t = metrics::time(&state.metrics, "roles_create");
     roles_cmd::create(&state.db, &state.sessions, &token, payload).map_err(map_err)
 }
 
@@ -140,11 +161,13 @@ fn roles_update(
     token: String,
     payload: models::RoleUpdate,
 ) -> Result<models::Role, AppError> {
+    let _t = metrics::time(&state.metrics, "roles_update");
     roles_cmd::update(&state.db, &state.sessions, &token, payload).map_err(map_err)
 }
 
 #[tauri::command]
 fn roles_delete(state: State<AppState>, token: String, id: String) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "roles_delete");
     roles_cmd::delete(&state.db, &state.sessions, &token, &id).map_err(map_err)
 }
 
@@ -155,6 +178,7 @@ fn roles_assign_menus(
     role_id: String,
     menu_ids: Vec<String>,
 ) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "roles_assign_menus");
     roles_cmd::assign_menus(&state.db, &state.sessions, &token, &role_id, menu_ids).map_err(map_err)
 }
 
@@ -164,16 +188,19 @@ fn roles_get_menus(
     token: String,
     role_id: String,
 ) -> Result<Vec<String>, AppError> {
+    let _t = metrics::time(&state.metrics, "roles_get_menus");
     roles_cmd::get_role_menus(&state.db, &state.sessions, &token, &role_id).map_err(map_err)
 }
 
 #[tauri::command]
 fn permissions_list(state: State<AppState>, token: String) -> Result<Vec<models::Permission>, AppError> {
+    let _t = metrics::time(&state.metrics, "permissions_list");
     perm_cmd::list(&state.db, &state.sessions, &token).map_err(map_err)
 }
 
 #[tauri::command]
 fn menus_tree(state: State<AppState>, token: String) -> Result<Vec<models::MenuNode>, AppError> {
+    let _t = metrics::time(&state.metrics, "menus_tree");
     menus_cmd::tree(&state.db, &state.sessions, &token).map_err(map_err)
 }
 
@@ -183,6 +210,7 @@ fn menus_create(
     token: String,
     payload: models::MenuCreate,
 ) -> Result<models::Menu, AppError> {
+    let _t = metrics::time(&state.metrics, "menus_create");
     menus_cmd::create(&state.db, &state.sessions, &token, payload).map_err(map_err)
 }
 
@@ -192,11 +220,13 @@ fn menus_update(
     token: String,
     payload: models::MenuUpdate,
 ) -> Result<models::Menu, AppError> {
+    let _t = metrics::time(&state.metrics, "menus_update");
     menus_cmd::update(&state.db, &state.sessions, &token, payload).map_err(map_err)
 }
 
 #[tauri::command]
 fn menus_delete(state: State<AppState>, token: String, id: String) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "menus_delete");
     menus_cmd::delete(&state.db, &state.sessions, &token, &id).map_err(map_err)
 }
 
@@ -212,6 +242,7 @@ fn resources_list(
     token: String,
     resource_type: String,
 ) -> Result<ResourceListResponse, AppError> {
+    let _t = metrics::time(&state.metrics, "resources_list");
     let items = res_cmd::list(&state.db, &state.sessions, &token, &resource_type)?;
     let active = res_cmd::get_active(&state.db, &resource_type)?;
     Ok(ResourceListResponse { items, active })
@@ -223,6 +254,7 @@ fn resources_import_theme(
     token: String,
     raw_json: String,
 ) -> Result<models::Resource, AppError> {
+    let _t = metrics::time(&state.metrics, "resources_import_theme");
     let (code, name, content) = res_cmd::parse_import("theme", &raw_json)?;
     res_cmd::import_theme(
         &state.db,
@@ -239,6 +271,7 @@ fn resources_import_locale(
     token: String,
     raw_json: String,
 ) -> Result<models::Resource, AppError> {
+    let _t = metrics::time(&state.metrics, "resources_import_locale");
     let (code, name, content) = res_cmd::parse_import("locale", &raw_json)?;
     res_cmd::import_locale(
         &state.db,
@@ -256,11 +289,13 @@ fn resources_activate(
     resource_type: String,
     code: String,
 ) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "resources_activate");
     res_cmd::activate(&state.db, &state.sessions, &token, &resource_type, &code).map_err(map_err)
 }
 
 #[tauri::command]
 fn resources_delete(state: State<AppState>, token: String, id: String) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "resources_delete");
     res_cmd::delete(&state.db, &state.sessions, &token, &id).map_err(map_err)
 }
 
@@ -270,6 +305,7 @@ fn resources_update(
     token: String,
     payload: models::ResourceUpdate,
 ) -> Result<models::Resource, AppError> {
+    let _t = metrics::time(&state.metrics, "resources_update");
     res_cmd::update(&state.db, &state.sessions, &token, payload).map_err(map_err)
 }
 
@@ -279,6 +315,7 @@ fn audit_list(
     token: String,
     query: Option<models::AuditQuery>,
 ) -> Result<audit_cmd::AuditListResult, AppError> {
+    let _t = metrics::time(&state.metrics, "audit_list");
     audit_cmd::list(
         &state.db,
         &state.sessions,
@@ -299,11 +336,13 @@ fn audit_list(
 
 #[tauri::command]
 fn migrate_run(state: State<AppState>) -> Result<migrate_cmd::MigrateResult, AppError> {
+    let _t = metrics::time(&state.metrics, "migrate_run");
     migrate_cmd::run(&state.db, state.migrations_dir.clone()).map_err(map_err)
 }
 
 #[tauri::command]
 fn migrate_status(state: State<AppState>) -> Result<Vec<crate::db::migrate::MigrationStatus>, AppError> {
+    let _t = metrics::time(&state.metrics, "migrate_status");
     migrate_cmd::status(&state.db, state.migrations_dir.clone()).map_err(map_err)
 }
 
@@ -324,6 +363,7 @@ pub struct AdminInfo {
 
 #[tauri::command]
 fn app_info(state: State<AppState>) -> Result<AppInfo, AppError> {
+    let _t = metrics::time(&state.metrics, "app_info");
     Ok(AppInfo {
         data_dir: state.data_dir.to_string_lossy().to_string(),
         db_path: state.db.path().to_string_lossy().to_string(),
@@ -345,6 +385,7 @@ fn settings_list(
     state: State<AppState>,
     token: String,
 ) -> Result<Vec<settings_cmd::Setting>, AppError> {
+    let _t = metrics::time(&state.metrics, "settings_list");
     settings_cmd::list(&state.db, &state.sessions, &token).map_err(map_err)
 }
 
@@ -354,6 +395,7 @@ fn settings_set(
     token: String,
     updates: Vec<settings_cmd::SettingUpdate>,
 ) -> Result<Vec<settings_cmd::Setting>, AppError> {
+    let _t = metrics::time(&state.metrics, "settings_set");
     settings_cmd::set_many(&state.db, &state.sessions, &token, updates).map_err(map_err)
 }
 
@@ -363,16 +405,19 @@ fn settings_set(
 
 #[tauri::command]
 fn backup_list(state: State<AppState>, token: String) -> Result<Vec<backup_cmd::BackupInfo>, AppError> {
+    let _t = metrics::time(&state.metrics, "backup_list");
     backup_cmd::list(&state.db, &state.sessions, &token).map_err(map_err)
 }
 
 #[tauri::command]
 fn backup_create(state: State<AppState>, token: String) -> Result<backup_cmd::BackupInfo, AppError> {
+    let _t = metrics::time(&state.metrics, "backup_create");
     backup_cmd::create(&state.db, &state.sessions, &token).map_err(map_err)
 }
 
 #[tauri::command]
 fn backup_delete(state: State<AppState>, token: String, name: String) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "backup_delete");
     backup_cmd::delete(&state.db, &state.sessions, &token, &name).map_err(map_err)
 }
 
@@ -382,7 +427,95 @@ fn backup_restore(
     token: String,
     name: String,
 ) -> Result<backup_cmd::RestoreRequest, AppError> {
+    let _t = metrics::time(&state.metrics, "backup_restore");
     backup_cmd::restore(&state.db, &state.sessions, &token, &name).map_err(map_err)
+}
+
+// =============================================================
+// IPC performance monitoring
+// =============================================================
+//
+// `metrics_snapshot` / `metrics_clear` are wrapped too — but the snapshot
+// itself is what feeds them, so the UI may want to filter these out to avoid
+// recursion noise.  We don't bother — the round-trip is microseconds.
+
+#[tauri::command]
+fn metrics_snapshot(state: State<AppState>) -> Vec<metrics::IpcMetric> {
+    let _t = metrics::time(&state.metrics, "metrics_snapshot");
+    state.metrics.snapshot()
+}
+
+#[tauri::command]
+fn metrics_clear(state: State<AppState>) {
+    let _t = metrics::time(&state.metrics, "metrics_clear");
+    state.metrics.clear();
+}
+
+// =============================================================
+// Crash diagnostics
+// =============================================================
+//
+// `crash_log` accepts frontend-reported incidents (Vue errorHandler +
+// window.onunhandledrejection). The Rust panic hook bypasses this and writes
+// directly to the store. List / get / clear require `diagnostics:read` /
+// `diagnostics:clear`.
+
+#[tauri::command]
+fn crash_log(state: State<AppState>, input: crash_cmd::CrashReportInput) -> Result<crash_cmd::CrashReport, AppError> {
+    let _t = metrics::time(&state.metrics, "crash_log");
+    state.crashes.record(input).map_err(|e| AppError::Internal(e.to_string()))
+}
+
+#[tauri::command]
+fn crash_list(state: State<AppState>, token: String) -> Result<Vec<crash_cmd::CrashReport>, AppError> {
+    let _t = metrics::time(&state.metrics, "crash_list");
+    let user = state.sessions.lookup(&token).map_err(map_err)?;
+    crate::auth::rbac::require_permission(&user, "diagnostics:read").map_err(map_err)?;
+    state.crashes.list().map_err(|e| AppError::Internal(e.to_string()))
+}
+
+#[tauri::command]
+fn crash_clear(state: State<AppState>, token: String) -> Result<usize, AppError> {
+    let _t = metrics::time(&state.metrics, "crash_clear");
+    let user = state.sessions.lookup(&token).map_err(map_err)?;
+    crate::auth::rbac::require_permission(&user, "diagnostics:clear").map_err(map_err)?;
+    state.crashes.clear().map_err(|e| AppError::Internal(e.to_string()))
+}
+
+// =============================================================
+// Auto-update
+// =============================================================
+//
+// Two commands: `updater_check` (returns the latest manifest) and
+// `updater_install` (downloads + stages the new binary; the user must
+// restart to actually swap).  Both require `updater:check` / `updater:apply`.
+
+#[tauri::command]
+async fn updater_check(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    token: String,
+) -> Result<updater_cmd::UpdateManifest, AppError> {
+    let _t = metrics::time(&state.metrics, "updater_check");
+    let user = state.sessions.lookup(&token).map_err(map_err)?;
+    crate::auth::rbac::require_permission(&user, "updater:check").map_err(map_err)?;
+    updater_cmd::check(&app)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))
+}
+
+#[tauri::command]
+async fn updater_install(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    token: String,
+) -> Result<(), AppError> {
+    let _t = metrics::time(&state.metrics, "updater_install");
+    let user = state.sessions.lookup(&token).map_err(map_err)?;
+    crate::auth::rbac::require_permission(&user, "updater:apply").map_err(map_err)?;
+    updater_cmd::install(&app)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))
 }
 
 // =============================================================
@@ -519,8 +652,17 @@ pub fn run() {
         db,
         sessions,
         migrations_dir,
-        data_dir,
+        data_dir: data_dir.clone(),
+        metrics: metrics::MetricsRegistry::shared(),
+        crashes: Arc::new(
+            crash_cmd::CrashStore::new(&data_dir)
+                .expect("init crash store"),
+        ),
     };
+
+    // Install the panic hook AFTER CrashStore is constructed — any panic that
+    // escapes a command from here on will land in <data_dir>/crashes/.
+    crash_cmd::install_panic_hook(state.crashes.clone());
 
     tauri::Builder::default()
         .manage(state)
@@ -568,6 +710,13 @@ pub fn run() {
             backup_create,
             backup_delete,
             backup_restore,
+            metrics_snapshot,
+            metrics_clear,
+            crash_log,
+            crash_list,
+            crash_clear,
+            updater_check,
+            updater_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
