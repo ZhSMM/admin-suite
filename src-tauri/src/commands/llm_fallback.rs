@@ -431,13 +431,14 @@ pub async fn llm_fallback_speed_test(
                 urls.push((s, label));
             }
         } else {
-            // Fallback: construct a known URL from the spec.
-            let url = format!(
-                "https://huggingface.co/{}/resolve/main/{}",
-                spec.hf_repo,
-                spec.preferred_file_glob.replace('*', "")
-            );
-            urls.push((Box::leak(url.into_boxed_str()), "primary"));
+            // resolve_spec failed (HF API unreachable). Fall back to
+            // probing the ROOT of each mirror — these URLs are tiny and
+            // always HEAD 200 if the source itself is reachable. This
+            // gives the user a meaningful "which mirror can I reach"
+            // signal even when HF API is blocked.
+            urls.push(("https://huggingface.co/", "primary"));
+            urls.push(("https://hf-mirror.com/", "hf-mirror"));
+            urls.push(("https://www.modelscope.cn/", "modelscope"));
         }
     }
     let mut results = Vec::with_capacity(urls.len());

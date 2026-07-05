@@ -155,6 +155,9 @@ export interface FallbackModelMirror {
   size_bytes: number
   min_ram_gb: number
   primary_url: string
+  /** "probe" = always-HEAD-200 repo page (pre-resolve);
+   *  "download" = real blob URL (after resolve_spec). */
+  primary_url_kind: 'probe' | 'download'
 }
 
 export interface FallbackMirror {

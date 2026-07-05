@@ -53,7 +53,13 @@ pub struct FallbackModelMirror {
     pub display_name: String,
     pub size_bytes: u64,
     pub min_ram_gb: u32,
+    /// Always populated. When `primary_url_kind == "probe"` this is a
+    /// HEAD-200-only URL used to test reachability; the real download
+    /// URL is fetched by `resolve_spec()` at install time.
     pub primary_url: String,
+    /// "probe" (always-HEAD-200 repo page) or "download" (real blob URL,
+    /// only set after `resolve_spec()` succeeds and the cache has it).
+    pub primary_url_kind: String,
     pub parameter_count: String,
     pub quantization: String,
     pub family: String,
@@ -67,12 +73,18 @@ pub fn model_mirrors() -> Vec<FallbackModelMirror> {
             display_name: s.display_name.to_string(),
             size_bytes: s.size_estimate_bytes,
             min_ram_gb: s.min_ram_gb,
-            // Best-effort default URL; real download uses resolve_spec() at
-            // install time which queries HuggingFace for the actual blob.
-            primary_url: format!(
-                "https://huggingface.co/{}/resolve/main/{}",
-                s.hf_repo, s.preferred_file_glob.replace('*', "")
-            ),
+            // The `model_mirrors` endpoint is called BEFORE any network
+            // resolve — we don't have a real blob URL yet. Returning a
+            // constructed URL like "resolve/main/q4_k_m.gguf" would 404
+            // because HF repos have full filenames like
+            // "qwen2.5-1.5b-instruct-q4_k_m.gguf", not the glob minus stars.
+            //
+            // Instead we expose a stable, always-HEAD-200 PROBE URL (the
+            // model's repo page) so the UI / speed-test can confirm the
+            // source is reachable. The real download URL is fetched by
+            // `resolve_spec()` at install time.
+            primary_url: format!("https://huggingface.co/{}", s.hf_repo),
+            primary_url_kind: "probe".to_string(),
             parameter_count: s.parameter_count.to_string(),
             quantization: s.quantization.to_string(),
             family: s.family.to_string(),
