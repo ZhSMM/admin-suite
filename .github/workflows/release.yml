@@ -27,6 +27,11 @@ jobs:
           # - target: i686-pc-windows-msvc
           #   args: --target i686-pc-windows-msvc
 
+    env:
+      # Path where Tauri looks for WiX 3 binaries. We pre-populate this with
+      # the cache step below so tauri build doesn't try to redownload.
+      WIX_CACHE: ${{ runner.os == 'Windows' && format('{0}\.cargo\wix\wix3141rtm', env.USERPROFILE) || format('{0}/.cargo/wix/wix3141rtm', env.HOME) }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,6 +58,45 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
         shell: pwsh
+
+      # -----------------------------------------------------------------------------
+      # Pre-cache WiX 3.14.1 binaries so `tauri build` doesn't have to download
+      # them from github.com/wixtoolset mid-bundle. GitHub Actions runners
+      # occasionally hit transient network errors hitting that URL (os error
+      # 10060); a 1-time install here sidesteps the race. The path matches
+      # Tauri's default install location (`~/.cargo/wix/wix3141rtm/`).
+      # -----------------------------------------------------------------------------
+      - name: Cache WiX 3 binaries
+        id: wix-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.WIX_CACHE }}
+          key: wix-3.14.1-${{ runner.os }}
+
+      - name: Install WiX 3 (cache miss)
+        if: steps.wix-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $wixDir = $env:WIX_CACHE
+          New-Item -ItemType Directory -Force -Path $wixDir | Out-Null
+          $zip = Join-Path $env:TEMP "wix314-binaries.zip"
+          $urls = @(
+            "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip",
+            "https://github.com/ZhSMM/wix-mirror/releases/download/wix3141rtm/wix314-binaries.zip"
+          )
+          $ok = $false
+          foreach ($u in $urls) {
+            try {
+              Write-Host "downloading $u"
+              Invoke-WebRequest -Uri $u -OutFile $zip -UseBasicParsing -TimeoutSec 120
+              Expand-Archive -Path $zip -DestinationPath $wixDir -Force
+              $ok = $true
+              break
+            } catch {
+              Write-Warning "wix download failed from ${u}: $_"
+            }
+          }
+          if (-not $ok) { throw "could not download WiX 3.14.1 from any mirror" }
 
       # -----------------------------------------------------------------------------
       # The official Tauri action wraps the bundling, signs (if secrets present),
