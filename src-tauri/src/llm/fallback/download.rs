@@ -35,6 +35,8 @@ pub enum DownloadError {
     HashMismatch { actual: String, expected: String },
     #[error("cancelled")]
     Cancelled,
+    #[error("stalled: no data for {seconds}s")]
+    Stalled { seconds: u64 },
 }
 
 pub struct DownloadHandle {
@@ -47,7 +49,7 @@ impl DownloadHandle {
     }
 }
 
-/// Stream a URL to a local file. Reports progress every 500ms via
+/// Stream a URL to a local file. Reports progress every 250ms via
 /// `on_progress(bytes_done, total_bytes, speed_bps, eta_seconds)`. Returns
 /// the SHA-256 of the resulting file on success.
 ///
@@ -87,6 +89,10 @@ pub async fn stream_to_file(
     let mut bytes_done: u64 = 0;
     let mut last_tick = std::time::Instant::now();
     let mut last_bytes: u64 = 0;
+    // Stall detection: if no bytes arrive for `STALL_TIMEOUT` while the
+    // server's Content-Length implies more to come, abort with Stalled.
+    const STALL_TIMEOUT: u64 = 15;
+    let mut last_data_at = std::time::Instant::now();
     // Stream the body chunk by chunk. We use `move async {}` so the
     // locals are owned by the future (no `FnMut` capture escaping).
     let download_body = async {
@@ -98,8 +104,20 @@ pub async fn stream_to_file(
             f.write_all(&chunk)?;
             hasher.update(&chunk);
             bytes_done += chunk.len() as u64;
+            if !chunk.is_empty() {
+                last_data_at = std::time::Instant::now();
+            }
+            // Stall check: only after we have some data + server promised more.
+            if total > bytes_done
+                && bytes_done > 0
+                && last_data_at.elapsed().as_secs() >= STALL_TIMEOUT
+            {
+                return Err::<(), DownloadError>(DownloadError::Stalled {
+                    seconds: STALL_TIMEOUT,
+                });
+            }
             let now = std::time::Instant::now();
-            if now.duration_since(last_tick).as_millis() >= 500 {
+            if now.duration_since(last_tick).as_millis() >= 250 {
                 let speed_bps = ((bytes_done - last_bytes) as f64
                     / now.duration_since(last_tick).as_secs_f64()) as u64;
                 let eta_seconds = if speed_bps > 0 && total > bytes_done {

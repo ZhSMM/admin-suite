@@ -64,25 +64,33 @@
 
       <!-- Download progress -->
       <el-form-item v-if="isInstalling" :label="t('settings.ai.fallback.progress')">
+        <div class="progress-meta">
+          <span class="stage">
+            <span v-if="llm.installCurrentStage === 'server'">
+              {{ t('settings.ai.fallback.stageServer') }}
+            </span>
+            <span v-else>{{ t('settings.ai.fallback.stageModel') }}</span>
+          </span>
+          <span class="counter" v-if="llm.installProgress">
+            {{ formatBytes(llm.installProgress.bytesDone) }}
+            <span class="counter-sep">/</span>
+            {{ formatBytes(llm.installProgress.totalBytes || selectedModelSize) }}
+          </span>
+          <span class="speed" v-if="llm.installProgress && llm.installProgress.speedBps > 0">
+            {{ formatSpeed(llm.installProgress.speedBps) }}
+          </span>
+          <span class="eta" v-if="llm.installProgress && llm.installProgress.etaSeconds > 0">
+            ETA {{ formatEta(llm.installProgress.etaSeconds) }}
+          </span>
+        </div>
         <el-progress
           :percentage="progressPct"
           :stroke-width="14"
           :status="llm.installError ? 'exception' : undefined"
           :format="formatProgress"
         />
-        <div class="progress-detail">
-          <span v-if="llm.installCurrentStage === 'server'">
-            {{ t('settings.ai.fallback.stageServer') }}
-          </span>
-          <span v-else>{{ t('settings.ai.fallback.stageModel') }}</span>
-          <span v-if="llm.installProgress">
-            · {{ formatBytes(llm.installProgress.bytesDone) }} /
-            {{ formatBytes(llm.installProgress.totalBytes || selectedModelSize) }}
-            · {{ formatSpeed(llm.installProgress.speedBps) }}
-            <span v-if="llm.installProgress.etaSeconds > 0">
-              · ETA {{ formatEta(llm.installProgress.etaSeconds) }}
-            </span>
-          </span>
+        <div v-if="stalledHint" class="stall-hint">
+          <el-alert :title="stalledHint" type="warning" :closable="false" show-icon />
         </div>
       </el-form-item>
 
@@ -267,6 +275,17 @@ const progressPct = computed(() => {
   return Math.min(100, Math.round((p.bytesDone / p.totalBytes) * 100))
 })
 
+// Stall hint: when bytesDone hasn't moved for >10s while expected > bytesDone.
+const stalledHint = computed(() => {
+  const p = llm.installProgress
+  if (!p || !isInstalling.value) return ''
+  const pct = p.totalBytes ? p.bytesDone / p.totalBytes : 0
+  if (pct > 0.02 && pct < 0.99 && p.speedBps === 0) {
+    return t('settings.ai.fallback.stalledHint')
+  }
+  return ''
+})
+
 const diskFree = ref<number | null>(null)
 
 const diskFreeHuman = computed(() => {
@@ -382,9 +401,37 @@ async function onRemove() {
     font-size: 14px;
   }
 }
-.progress-detail {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
+.progress-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  flex-wrap: wrap;
+  .stage {
+    color: var(--el-text-color-secondary);
+    font-weight: 500;
+  }
+  .counter {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+    .counter-sep {
+      color: var(--el-text-color-placeholder);
+      margin: 0 4px;
+    }
+  }
+  .speed {
+    color: var(--el-color-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .eta {
+    color: var(--el-text-color-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+.stall-hint {
+  margin-top: 8px;
 }
 </style>

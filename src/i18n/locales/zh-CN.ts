@@ -714,6 +714,7 @@ export default {
   'settings.ai.fallback.disclaimerTitle': '本地 AI — 许可说明',
   'settings.ai.fallback.disclaimerBody': '即将下载 {model}。\n\n该模型按其自身许可证分发(Qwen 系列为 Apache-2.0;Llama 系列为 Llama 3 Community License)。继续操作即表示您接受所选模型的许可条款。\n\n下载来源为公开镜像;使用情况可能用于诊断日志。',
   'settings.ai.fallback.disclaimerAccept': '我同意',
+  'settings.ai.fallback.stalledHint': '下载似乎卡住了(没有收到新字节)。请检查网络后重试。',
 
   'settings.ai.help': '每个 AI 工具的默认模型。用户在 AI 工具里手动选过的会覆盖这里的设置。',
   'settings.ai.defaultChat': 'Chat 默认模型',

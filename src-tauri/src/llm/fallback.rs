@@ -67,8 +67,11 @@ pub static MODELS: &[FallbackModel] = &[
         sha256: "",
         context_window: 8192,
         primary_url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        // Try HF mirror first (often faster than HF), then ModelScope (works
+        // when both HF and its mirror are blocked, e.g. in mainland China).
         mirror_urls: &[
             "https://hf-mirror.com/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "https://www.modelscope.cn/models/qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
         ],
         min_ram_gb: 4,
     },
@@ -84,6 +87,7 @@ pub static MODELS: &[FallbackModel] = &[
         primary_url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
         mirror_urls: &[
             "https://hf-mirror.com/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+            "https://www.modelscope.cn/models/LLM-Research/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
         ],
         min_ram_gb: 6,
     },

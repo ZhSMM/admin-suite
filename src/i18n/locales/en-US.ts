@@ -694,6 +694,7 @@ export default {
   'settings.ai.fallback.disclaimerTitle': 'Local AI — License Notice',
   'settings.ai.fallback.disclaimerBody': 'You are about to download {model}.\n\nThe model is distributed under its own license (Qwen models are Apache-2.0; Llama models are under the Llama 3 Community License). By continuing you accept the license terms of the chosen model.\n\nThe download comes from public mirrors; usage may be logged for diagnostics.',
   'settings.ai.fallback.disclaimerAccept': 'I accept',
+  'settings.ai.fallback.stalledHint': 'Download appears to be stalled (no bytes received). Check your network connection or try again.',
 
   'settings.ai.help': 'Per-tool default models. Per-user picks made in the AI tools override these.',
   'settings.ai.defaultChat': 'Default Chat model',

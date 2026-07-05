@@ -162,6 +162,10 @@ export const useLlmStore = defineStore('llm', {
         async (e) => {
           if (e.payload.model_id !== target) return
           this.installInFlight = false
+          // Always wipe the in-flight UI state so the panel doesn't get
+          // stuck showing "Downloading 0%" after the install finishes.
+          this.installProgress = null
+          this.installCurrentStage = null
           if (!e.payload.success) {
             this.installError = e.payload.error || 'install failed'
           }
