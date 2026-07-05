@@ -28,10 +28,11 @@ jobs:
           #   args: --target i686-pc-windows-msvc
 
     env:
-      # Path where Tauri looks for WiX 3 binaries. We pre-populate this with
-      # the cache step below so tauri build doesn't try to redownload.
-      # Hardcoded for windows-latest runners; macOS/Linux aren't supported yet.
-      WIX_CACHE: ~/.cargo/wix/wix3141rtm
+      # Path where Tauri's bundler looks for WiX 3 binaries (verified
+      # against tauri-bundler v1.6's `wix.rs::get_wix_path`). Pre-populating
+      # this with the cache step below sidesteps Tauri's flaky mid-bundle
+      # download from github.com/wixtoolset.
+      WIX_CACHE: ${{ env.LOCALAPPDATA }}\tauri\WiX
 
     steps:
       - name: Checkout
@@ -77,6 +78,8 @@ jobs:
       - name: Install WiX 3 (cache miss)
         if: steps.wix-cache.outputs.cache-hit != 'true'
         shell: pwsh
+        env:
+          WIX_CACHE: ${{ env.LOCALAPPDATA }}\tauri\WiX
         run: |
           $wixDir = $env:WIX_CACHE
           New-Item -ItemType Directory -Force -Path $wixDir | Out-Null

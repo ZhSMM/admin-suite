@@ -1,5 +1,0 @@
-ci(release): hardcode WIX_CACHE path for windows-latest runner
-
-The previous env-var format() chain tripped GitHub Actions' stricter
-workflow validator. Hardcoding the path matches the only OS we ship for
-today.
