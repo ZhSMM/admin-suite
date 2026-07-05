@@ -1,7 +1,8 @@
 name: CI
 
-# Run on every push to main and every PR. Doesn't produce installers —
-# just verifies the code compiles and tests pass.
+# Verify code compiles, tests pass, and frontend builds on every push to
+# main + every PR. This does NOT produce installers — that's the Release
+# workflow's job.
 
 on:
   push:
@@ -9,10 +10,24 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel superseded PR runs — only the latest commit matters. Saves
+# minutes when a PR gets pushed repeatedly.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   rust:
     name: cargo check + test
     runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: short
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,18 +38,21 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          cache-on-failure: true
 
       - name: cargo check
         working-directory: src-tauri
-        run: cargo check --message-format=short
+        run: cargo check --message-format=short --locked
 
       - name: cargo test
         working-directory: src-tauri
         run: cargo test --lib
 
   web:
-    name: vue-tsc + vite build
+    name: vue-tsc + vitest + vite build + i18n audit
     runs-on: windows-latest
+    timeout-minutes: 15
+
     steps:
       - uses: actions/checkout@v4
 
@@ -44,11 +62,52 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-20-ci-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-20-ci-
+
+      - name: Install npm dependencies
+        if: steps.node-cache.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: vue-tsc
+      - name: Type-check (vue-tsc)
         run: npx vue-tsc --noEmit
 
-      - name: vite build
+      - name: Unit tests (vitest)
+        # Force a clean tsbuildinfo before running; vue-tsc's incremental
+        # cache occasionally pins stale compiled output (see DEVELOPING.md
+        # §10.8 for details).
+        run: |
+          if (Test-Path tsconfig.tsbuildinfo) { Remove-Item tsconfig.tsbuildinfo -Force }
+          npm test
+        shell: pwsh
+
+      - name: Audit UI strings (no Chinese in source)
+        # The shipped locale bundles (zh-CN.ts / en-US.ts) contain CJK
+        # intentionally; everywhere else should be ASCII so missing i18n
+        # keys don't ship in the bundle.
+        run: python scripts/audit-i18n.py
+
+      - name: Production build (vite)
         run: npm run build
+
+  audit:
+    # Cheap top-level check that runs only after both jobs pass — fails
+    # the whole PR if Rust or web checks went red. Saves a roundtrip
+    # when developers only look at one job's status.
+    name: aggregate gate
+    runs-on: windows-latest
+    needs: [rust, web]
+    if: always()
+    steps:
+      - name: Aggregate
+        run: |
+          if ("${{ needs.rust.result }}" -ne "success" -or "${{ needs.web.result }}" -ne "success") {
+            Write-Host "rust=${{ needs.rust.result }} web=${{ needs.web.result }}"
+            exit 1
+          }
+          Write-Host "all gates green"
