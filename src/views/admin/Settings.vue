@@ -84,6 +84,9 @@
         <strong>{{ t('settings.section.ai') }}</strong>
       </template>
       <el-alert :title="t('settings.ai.help')" type="info" :closable="false" style="margin-bottom: 12px" />
+
+      <!-- v0.6.2 — One-click local install -->
+      <LocalModelPanel />
       <el-form label-width="240px">
         <el-form-item :label="t('settings.ai.defaultChat')">
           <el-select
@@ -162,6 +165,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useLlmStore } from '@/stores/llm'
 import { settingsApi, type Setting, type SettingUpdate } from '@/api/settings'
+import LocalModelPanel from '@/views/ai/LocalModelPanel.vue'
 
 const { t } = useI18n()
 const auth = useAuthStore()

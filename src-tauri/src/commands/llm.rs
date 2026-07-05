@@ -552,7 +552,17 @@ pub async fn llm_chat(
     let _user = require_perm(&state, &token, "llm:use")?;
     let request_id = uuid::Uuid::new_v4().to_string();
     let started = std::time::Instant::now();
-    let (provider_row, model_row, ctx) = resolve(&state, &args.provider_id, &args.model_id)?;
+    // v0.6.2 — local-first routing. If `ai.local_first=true` and the
+    // fallback engine is Ready + has a provider row, rewrite to it.
+    let mut provider_id = args.provider_id.clone();
+    let mut model_id = args.model_id.clone();
+    crate::commands::llm_fallback::maybe_reroute_to_local(
+        &state.db,
+        &state.fallback,
+        &mut provider_id,
+        &mut model_id,
+    )?;
+    let (provider_row, model_row, ctx) = resolve(&state, &provider_id, &model_id)?;
     let adapter = pick_adapter(&provider_row.kind);
     let req = ChatRequest {
         model: model_row.code.clone(),
@@ -600,7 +610,16 @@ pub async fn llm_chat_stream(
     let _user = require_perm(&state, &token, "llm:use")?;
     let request_id = uuid::Uuid::new_v4().to_string();
     let started = std::time::Instant::now();
-    let (provider_row, model_row, ctx) = resolve(&state, &args.provider_id, &args.model_id)?;
+    // v0.6.2 — local-first routing (see llm_chat).
+    let mut provider_id = args.provider_id.clone();
+    let mut model_id = args.model_id.clone();
+    crate::commands::llm_fallback::maybe_reroute_to_local(
+        &state.db,
+        &state.fallback,
+        &mut provider_id,
+        &mut model_id,
+    )?;
+    let (provider_row, model_row, ctx) = resolve(&state, &provider_id, &model_id)?;
     let adapter = pick_adapter(&provider_row.kind);
     let req = ChatRequest {
         model: model_row.code.clone(),
@@ -748,7 +767,7 @@ pub fn llm_usage_query(
 // Internals
 // ---------------------------------------------------------------------------
 
-fn require_perm(state: &State<AppState>, token: &str, perm: &str) -> AppResult<AuthenticatedUser> {
+pub fn require_perm(state: &State<AppState>, token: &str, perm: &str) -> AppResult<AuthenticatedUser> {
     let user = state.sessions.lookup(token)?;
     crate::auth::rbac::require_permission(&user, perm)?;
     Ok(user)

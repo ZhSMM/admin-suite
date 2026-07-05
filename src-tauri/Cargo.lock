@@ -36,6 +36,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "zeroize",
+ "zip",
 ]
 
 [[package]]
@@ -5449,6 +5450,7 @@ dependencies = [
  "byteorder",
  "crc32fast",
  "crossbeam-utils",
+ "flate2",
 ]
 
 [[package]]

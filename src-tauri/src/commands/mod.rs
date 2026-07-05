@@ -3,6 +3,7 @@ pub mod auth;
 pub mod backup;
 pub mod crash;
 pub mod llm;
+pub mod llm_fallback;
 pub mod menus;
 pub mod metrics;
 pub mod migrate_cmd;

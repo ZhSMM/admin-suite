@@ -25,6 +25,7 @@ use crate::commands::audit as audit_cmd;
 use crate::commands::backup as backup_cmd;
 use crate::commands::crash::{self as crash_cmd, CrashStore};
 use crate::commands::llm::{self as llm_cmd};
+use crate::commands::llm_fallback;
 use crate::commands::menus as menus_cmd;
 use crate::commands::metrics::{self as metrics, SharedMetrics};
 use crate::commands::migrate_cmd as migrate_cmd;
@@ -764,6 +765,12 @@ pub fn run() {
             llm_cmd::llm_fallback_set_enabled,
             llm_cmd::llm_fallback_dismiss_startup_prompt,
             llm_cmd::llm_fallback_startup_prompt_needed,
+            // LLM v0.6.2 — one-click local install
+            llm_fallback::llm_fallback_install_start,
+            llm_fallback::llm_fallback_install_cancel,
+            llm_fallback::llm_fallback_server_start,
+            llm_fallback::llm_fallback_server_stop,
+            llm_fallback::llm_fallback_remove,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

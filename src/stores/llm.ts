@@ -1,6 +1,16 @@
 import { defineStore } from 'pinia'
-import { llmApi, type ChatMessage, type LlmModel, type LlmProvider } from '@/api/llm'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { llmApi, type ChatMessage, type LlmModel, type LlmProvider, type FallbackMirror, type FallbackState } from '@/api/llm'
 import { settingsApi } from '@/api/settings'
+
+export interface FallbackProgress {
+  stage: 'model' | 'server'
+  bytesDone: number
+  totalBytes: number
+  speedBps: number
+  etaSeconds: number
+  currentStage: 'model' | 'server'
+}
 
 interface State {
   providers: LlmProvider[]
@@ -19,6 +29,16 @@ interface State {
   // True after we've hydrated from server-side public settings — prevents
   // loadAll() from clobbering a freshly-saved override with a stale empty value.
   publicSettingsLoaded: boolean
+  // ---- v0.6.2 local install ----
+  fallbackState: FallbackState | null
+  fallbackModels: FallbackMirror['models']
+  installInFlight: boolean
+  installProgress: FallbackProgress | null
+  /** "all" | "server" | "model" — which stage just finished emitting the
+   *  most recent tick. Used to label the progress bar. */
+  installCurrentStage: 'server' | 'model' | null
+  installError: string | null
+  fallbackEventUnlisteners: UnlistenFn[]
 }
 
 export const useLlmStore = defineStore('llm', {
@@ -32,7 +52,14 @@ export const useLlmStore = defineStore('llm', {
     globalDefaultProviderId: null,
     globalDefaultModelId: null,
     localFirst: false,
-    publicSettingsLoaded: false
+    publicSettingsLoaded: false,
+    fallbackState: null,
+    fallbackModels: [],
+    installInFlight: false,
+    installProgress: null,
+    installCurrentStage: null,
+    installError: null,
+    fallbackEventUnlisteners: []
   }),
   getters: {
     enabledProviders: (s) => s.providers.filter((p) => p.enabled),
@@ -47,6 +74,11 @@ export const useLlmStore = defineStore('llm', {
     },
     effectiveModelId(state): string | null {
       return state.defaultModelId || state.globalDefaultModelId
+    },
+    /** Has the user accepted the license disclaimer? Stored locally so we
+     * only pester once per machine. */
+    disclaimerAccepted(): boolean {
+      return localStorage.getItem('llm.fallback.disclaimer_accepted_v1') === 'true'
     }
   },
   actions: {
@@ -54,12 +86,11 @@ export const useLlmStore = defineStore('llm', {
       this.loading = true
       this.error = null
       try {
-        const [providers, models, publicSettings] = await Promise.all([
+        const [providers, models, publicSettings, fallback] = await Promise.all([
           llmApi.listProviders(token),
           llmApi.listModels(token),
-          // settingsApi.listPublic is allowlisted server-side and only
-          // returns non-secret keys, so this is safe to call on every load.
-          settingsApi.listPublic(token).catch(() => [] as Awaited<ReturnType<typeof settingsApi.listPublic>>)
+          settingsApi.listPublic(token).catch(() => [] as Awaited<ReturnType<typeof settingsApi.listPublic>>),
+          llmApi.fallbackStatus().catch(() => null as FallbackMirror | null)
         ])
         this.providers = providers
         this.models = models
@@ -73,6 +104,10 @@ export const useLlmStore = defineStore('llm', {
           }
         }
         this.publicSettingsLoaded = true
+        if (fallback) {
+          this.fallbackState = fallback.state
+          this.fallbackModels = fallback.models
+        }
       } catch (e) {
         this.error = e instanceof Error ? e.message : String(e)
       } finally {
@@ -100,6 +135,101 @@ export const useLlmStore = defineStore('llm', {
       max_tokens?: number
     }) {
       return await llmApi.chat(token, args)
+    },
+    acceptDisclaimer() {
+      localStorage.setItem('llm.fallback.disclaimer_accepted_v1', 'true')
+    },
+    /** Subscribe to `llm:fallback:progress:<model_id>` and
+     * `llm:fallback:done:<model_id>` events for the duration of one install.
+     * Cleared automatically on done/error/cancel. */
+    async subscribeInstallEvents(modelId: string, token: string) {
+      // Tear down any prior listeners first.
+      this.unsubscribeInstallEvents()
+      const unlistenProgress = await listen<FallbackProgress>(
+        `llm:fallback:progress:${modelId}`,
+        (e) => {
+          this.installProgress = e.payload
+          this.installCurrentStage = e.payload.stage
+        }
+      )
+      const unlistenDone = await listen<{ model_id: string; success: boolean; error: string }>(
+        `llm:fallback:done:${modelId}`,
+        async (e) => {
+          this.installInFlight = false
+          if (!e.payload.success) {
+            this.installError = e.payload.error || 'install failed'
+          }
+          // Refresh the snapshot so the UI sees the new phase.
+          try {
+            const fb = await llmApi.fallbackStatus()
+            this.fallbackState = fb.state
+          } catch { /* ignore */ }
+          this.unsubscribeInstallEvents()
+        }
+      )
+      this.fallbackEventUnlisteners = [unlistenProgress, unlistenDone]
+    },
+    unsubscribeInstallEvents() {
+      for (const u of this.fallbackEventUnlisteners) u()
+      this.fallbackEventUnlisteners = []
+    },
+    async refreshFallback(token: string) {
+      try {
+        const fb = await llmApi.fallbackStatus()
+        this.fallbackState = fb.state
+        this.fallbackModels = fb.models
+      } catch (e) {
+        this.error = e instanceof Error ? e.message : String(e)
+      }
+    },
+    async installModel(token: string, modelId: string) {
+      this.installInFlight = true
+      this.installProgress = null
+      this.installCurrentStage = null
+      this.installError = null
+      await this.subscribeInstallEvents(modelId, token)
+      try {
+        await llmApi.fallbackInstallStart(token, modelId)
+      } catch (e) {
+        this.installInFlight = false
+        this.installError = e instanceof Error ? e.message : String(e)
+        this.unsubscribeInstallEvents()
+        throw e
+      }
+    },
+    async cancelInstall(token: string) {
+      try {
+        await llmApi.fallbackInstallCancel(token)
+      } catch (e) {
+        this.installError = e instanceof Error ? e.message : String(e)
+      }
+    },
+    async startServer(token: string) {
+      try {
+        await llmApi.fallbackServerStart(token)
+        await this.refreshFallback(token)
+      } catch (e) {
+        this.installError = e instanceof Error ? e.message : String(e)
+        throw e
+      }
+    },
+    async stopServer(token: string) {
+      try {
+        await llmApi.fallbackServerStop(token)
+        await this.refreshFallback(token)
+      } catch (e) {
+        this.installError = e instanceof Error ? e.message : String(e)
+        throw e
+      }
+    },
+    async removeModel(token: string) {
+      try {
+        await llmApi.fallbackRemove(token)
+        await this.refreshFallback(token)
+      } catch (e) {
+        this.installError = e instanceof Error ? e.message : String(e)
+        throw e
+      }
     }
   }
 })

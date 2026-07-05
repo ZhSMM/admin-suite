@@ -195,7 +195,7 @@ export const llmApi = {
       limit: opts.limit ?? 200
     }),
 
-  // Fallback
+  // Fallback (v0.6.0)
   fallbackStatus: () => call<FallbackMirror>('llm_fallback_status'),
   fallbackSelectModel: (token: string, model_id: string) =>
     call<void>('llm_fallback_select_model', { token, model_id }),
@@ -204,5 +204,20 @@ export const llmApi = {
   fallbackDismissStartupPrompt: (token: string) =>
     call<void>('llm_fallback_dismiss_startup_prompt', { token }),
   fallbackStartupPromptNeeded: (token: string) =>
-    call<boolean>('llm_fallback_startup_prompt_needed', { token })
+    call<boolean>('llm_fallback_startup_prompt_needed', { token }),
+
+  // Fallback (v0.6.2 — one-click local install)
+  fallbackInstallStart: (token: string, model_id: string) =>
+    call<{ model_id: string; model_size_bytes: number; server_size_bytes: number; already_installed: boolean }>(
+      'llm_fallback_install_start',
+      { token, model_id }
+    ),
+  fallbackInstallCancel: (token: string) =>
+    call<boolean>('llm_fallback_install_cancel', { token }),
+  fallbackServerStart: (token: string) =>
+    call<number>('llm_fallback_server_start', { token }),
+  fallbackServerStop: (token: string) =>
+    call<void>('llm_fallback_server_stop', { token }),
+  fallbackRemove: (token: string) =>
+    call<void>('llm_fallback_remove', { token })
 }

@@ -1,0 +1,352 @@
+<template>
+  <div class="local-panel">
+    <!-- Disclaimer modal (shown until user accepts once) -->
+    <el-dialog
+      v-model="disclaimerOpen"
+      :title="t('settings.ai.fallback.disclaimerTitle')"
+      width="560"
+      :show-close="false"
+      :close-on-click-modal="false"
+    >
+      <p style="white-space: pre-wrap">{{ disclaimerText }}</p>
+      <template #footer>
+        <el-button type="primary" @click="onAcceptDisclaimer">
+          {{ t('settings.ai.fallback.disclaimerAccept') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <div class="row">
+      <div class="meta">
+        <div class="label">{{ t('settings.ai.fallback.status') }}</div>
+        <div class="value">
+          <el-tag :type="statusTagType" size="small">{{ statusLabel }}</el-tag>
+        </div>
+      </div>
+      <div class="meta" v-if="isReady && serverRunning">
+        <div class="label">{{ t('settings.ai.fallback.endpoint') }}</div>
+        <div class="value">
+          <code>{{ baseUrl }}</code>
+        </div>
+      </div>
+    </div>
+
+    <el-form label-width="180px">
+      <el-form-item :label="t('settings.ai.fallback.model')">
+        <el-select
+          v-model="selectedModelId"
+          :disabled="isInstalling"
+          filterable
+          style="width: 100%"
+        >
+          <el-option
+            v-for="m in llm.fallbackModels"
+            :key="m.id"
+            :label="`${m.display_name} · ${formatSize(m.size_bytes)} · RAM≥${m.min_ram_gb}GB`"
+            :value="m.id"
+          />
+        </el-select>
+      </el-form-item>
+
+      <!-- Not installed / errored -->
+      <el-form-item v-if="showInstallButton" :label="t('settings.ai.fallback.diskFree')">
+        <span>{{ diskFreeHuman }}</span>
+      </el-form-item>
+
+      <!-- Download progress -->
+      <el-form-item v-if="isInstalling" :label="t('settings.ai.fallback.progress')">
+        <el-progress
+          :percentage="progressPct"
+          :stroke-width="14"
+          :status="llm.installError ? 'exception' : undefined"
+          :format="formatProgress"
+        />
+        <div class="progress-detail">
+          <span v-if="llm.installCurrentStage === 'server'">
+            {{ t('settings.ai.fallback.stageServer') }}
+          </span>
+          <span v-else>{{ t('settings.ai.fallback.stageModel') }}</span>
+          <span v-if="llm.installProgress">
+            · {{ formatBytes(llm.installProgress.bytesDone) }} /
+            {{ formatBytes(llm.installProgress.totalBytes || selectedModelSize) }}
+            · {{ formatSpeed(llm.installProgress.speedBps) }}
+            <span v-if="llm.installProgress.etaSeconds > 0">
+              · ETA {{ formatEta(llm.installProgress.etaSeconds) }}
+            </span>
+          </span>
+        </div>
+      </el-form-item>
+
+      <el-form-item>
+        <template v-if="showInstallButton">
+          <el-button
+            type="primary"
+            :icon="Download"
+            :loading="isInstalling"
+            @click="onInstall"
+          >
+            {{ t('settings.ai.fallback.install') }}
+          </el-button>
+        </template>
+
+        <template v-else-if="isInstalling">
+          <el-button type="danger" plain :icon="CircleClose" @click="onCancel">
+            {{ t('settings.ai.fallback.cancel') }}
+          </el-button>
+        </template>
+
+        <template v-else-if="isReady && !serverRunning">
+          <el-button type="success" :icon="VideoPlay" @click="onStartServer">
+            {{ t('settings.ai.fallback.startServer') }}
+          </el-button>
+          <el-button type="danger" plain :icon="Delete" @click="onRemove">
+            {{ t('settings.ai.fallback.remove') }}
+          </el-button>
+        </template>
+
+        <template v-else-if="serverRunning">
+          <el-button type="warning" :icon="VideoPause" @click="onStopServer">
+            {{ t('settings.ai.fallback.stopServer') }}
+          </el-button>
+          <el-button type="danger" plain :icon="Delete" @click="onRemove">
+            {{ t('settings.ai.fallback.remove') }}
+          </el-button>
+        </template>
+      </el-form-item>
+
+      <el-alert
+        v-if="llm.installError"
+        :title="llm.installError"
+        type="error"
+        show-icon
+        :closable="true"
+        @close="llm.installError = null"
+        style="margin-top: 8px"
+      />
+    </el-form>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  Download,
+  VideoPlay,
+  VideoPause,
+  Delete,
+  CircleClose
+} from '@element-plus/icons-vue'
+import { useI18n } from 'vue-i18n'
+import { useAuthStore } from '@/stores/auth'
+import { useLlmStore } from '@/stores/llm'
+
+const { t } = useI18n()
+const auth = useAuthStore()
+const llm = useLlmStore()
+
+const disclaimerOpen = ref(false)
+const selectedModelId = ref<string>('')
+
+onMounted(async () => {
+  if (!llm.disclaimerAccepted) {
+    disclaimerOpen.value = true
+  }
+  await llm.refreshFallback(auth.token || '')
+  if (!selectedModelId.value) {
+    selectedModelId.value =
+      llm.fallbackState?.selected_model_id ??
+      llm.fallbackModels[0]?.id ??
+      ''
+  }
+})
+
+watch(
+  () => llm.fallbackState?.selected_model_id,
+  (id) => {
+    if (id && !selectedModelId.value) selectedModelId.value = id
+  }
+)
+
+const disclaimerText = computed(() => {
+  const model = llm.fallbackModels.find((m) => m.id === selectedModelId.value)
+  const name = model?.display_name ?? 'the selected model'
+  return t('settings.ai.fallback.disclaimerBody', { model: name })
+})
+
+function onAcceptDisclaimer() {
+  llm.acceptDisclaimer()
+  disclaimerOpen.value = false
+}
+
+const selectedModelSize = computed(() => {
+  const m = llm.fallbackModels.find((mm) => mm.id === selectedModelId.value)
+  return m?.size_bytes ?? 0
+})
+
+const isReady = computed(() => {
+  const p = llm.fallbackState?.phase
+  return p != null && 'Ready' in p
+})
+
+const serverRunning = computed(() => {
+  const p = llm.fallbackState?.phase
+  return isReady.value && llm.fallbackState?.llama_server_port != null
+})
+
+const baseUrl = computed(() => {
+  const port = llm.fallbackState?.llama_server_port
+  return port ? `http://127.0.0.1:${port}/v1` : ''
+})
+
+const isInstalling = computed(
+  () => llm.installInFlight || (llm.installProgress != null)
+)
+
+const showInstallButton = computed(
+  () => !isReady.value && !isInstalling.value
+)
+
+const statusLabel = computed(() => {
+  const p = llm.fallbackState?.phase
+  if (!p) return t('settings.ai.fallback.statusUnknown')
+  if ('NotDownloaded' in p) return t('settings.ai.fallback.statusNotInstalled')
+  if ('Downloading' in p) return t('settings.ai.fallback.statusDownloading')
+  if ('Verifying' in p) return t('settings.ai.fallback.statusVerifying')
+  if ('Ready' in p) {
+    return serverRunning.value
+      ? t('settings.ai.fallback.statusRunning')
+      : t('settings.ai.fallback.statusReady')
+  }
+  if ('Error' in p) return t('settings.ai.fallback.statusError')
+  if ('HashMismatch' in p) return t('settings.ai.fallback.statusHashMismatch')
+  return t('settings.ai.fallback.statusUnknown')
+})
+
+const statusTagType = computed(() => {
+  const p = llm.fallbackState?.phase
+  if (!p) return 'info'
+  if ('Ready' in p) return serverRunning.value ? 'success' : 'info'
+  if ('Error' in p || 'HashMismatch' in p) return 'danger'
+  if ('Downloading' in p || 'Verifying' in p) return 'warning'
+  return 'info'
+})
+
+const progressPct = computed(() => {
+  const p = llm.installProgress
+  if (!p || !p.totalBytes) return 0
+  return Math.min(100, Math.round((p.bytesDone / p.totalBytes) * 100))
+})
+
+const diskFreeHuman = computed(() => t('settings.ai.fallback.diskFreeChecking'))
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+function formatSize(n: number): string {
+  return formatBytes(n)
+}
+
+function formatSpeed(bps: number): string {
+  return `${formatBytes(bps)}/s`
+}
+
+function formatEta(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
+}
+
+function formatProgress(percentage: number): string {
+  return `${percentage}%`
+}
+
+async function onInstall() {
+  if (!selectedModelId.value) return
+  if (!llm.disclaimerAccepted) {
+    disclaimerOpen.value = true
+    return
+  }
+  try {
+    await llm.installModel(auth.token || '', selectedModelId.value)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : String(e))
+  }
+}
+
+async function onCancel() {
+  await llm.cancelInstall(auth.token || '')
+  ElMessage.info(t('settings.ai.fallback.cancelled'))
+}
+
+async function onStartServer() {
+  try {
+    await llm.startServer(auth.token || '')
+    ElMessage.success(t('settings.ai.fallback.serverStarted'))
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : String(e))
+  }
+}
+
+async function onStopServer() {
+  try {
+    await llm.stopServer(auth.token || '')
+    ElMessage.success(t('settings.ai.fallback.serverStopped'))
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : String(e))
+  }
+}
+
+async function onRemove() {
+  try {
+    await ElMessageBox.confirm(
+      t('settings.ai.fallback.removeConfirm'),
+      t('common.confirm'),
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await llm.removeModel(auth.token || '')
+    ElMessage.success(t('settings.ai.fallback.removed'))
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : String(e))
+  }
+}
+</script>
+
+<style scoped lang="scss">
+.local-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.row {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  .label {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+  .value {
+    font-size: 14px;
+  }
+}
+.progress-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+</style>

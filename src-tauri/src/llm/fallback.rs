@@ -16,12 +16,15 @@ use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
 pub mod download;
+
+pub use download::{DownloadError, DownloadHandle, DownloadProgress};
 
 /// Phase of the fallback model's lifecycle.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -140,6 +143,11 @@ struct Inner {
     data_dir: PathBuf,
     server_child: Option<Child>,
     server_started_at: Option<Instant>,
+    /// Active download cancellation flag (None when nothing is downloading).
+    download_cancel: Option<Arc<AtomicBool>>,
+    /// Which stage is currently being downloaded ("model" or "server"), for
+    /// UI progress display.
+    download_stage: Option<String>,
     /// Map of model_id -> last error string for UI.
     error_log: HashMap<String, String>,
 }
@@ -153,6 +161,8 @@ impl FallbackManager {
                 data_dir,
                 server_child: None,
                 server_started_at: None,
+                download_cancel: None,
+                download_stage: None,
                 error_log: HashMap::new(),
             })),
         }
@@ -286,6 +296,267 @@ impl FallbackManager {
             .server_started_at
             .map(|t| t.elapsed().as_secs())
     }
+
+    // -----------------------------------------------------------------
+    // v0.6.2 — One-click local install
+    // -----------------------------------------------------------------
+
+    /// Returns the cancel handle for the in-flight download (if any), and
+    /// marks it cancelled. The download future will observe the flag on its
+    /// next chunk and exit with `DownloadError::Cancelled`.
+    pub fn cancel_download(&self) -> bool {
+        let mut g = self.inner.lock().unwrap();
+        if let Some(flag) = g.download_cancel.take() {
+            flag.store(true, Ordering::Relaxed);
+            g.download_stage = None;
+            let _ = g.state.save(&g.data_dir.join("llm"));
+            true
+        } else {
+            false
+        }
+    }
+
+    /// True iff a download is currently in flight.
+    pub fn is_downloading(&self) -> bool {
+        self.inner.lock().unwrap().download_cancel.is_some()
+    }
+
+    /// Which stage is currently being downloaded ("model" | "server" | None).
+    pub fn current_download_stage(&self) -> Option<String> {
+        self.inner.lock().unwrap().download_stage.clone()
+    }
+
+    /// Allocate a fresh cancel handle and install it in the manager. Returns
+    /// the handle + a guard RAII type that clears the handle on drop.
+    pub fn begin_download(&self, stage: &str) -> DownloadGuard {
+        let mut g = self.inner.lock().unwrap();
+        // Cancel anything still in flight (last-resort cleanup).
+        if let Some(prev) = g.download_cancel.take() {
+            prev.store(true, Ordering::Relaxed);
+        }
+        let flag = Arc::new(AtomicBool::new(false));
+        g.download_cancel = Some(flag.clone());
+        g.download_stage = Some(stage.to_string());
+        let _ = g.state.save(&g.data_dir.join("llm"));
+        DownloadGuard {
+            manager: self.clone(),
+            flag,
+        }
+    }
+
+    fn clear_download(&self) {
+        let mut g = self.inner.lock().unwrap();
+        g.download_cancel = None;
+        g.download_stage = None;
+        let _ = g.state.save(&g.data_dir.join("llm"));
+    }
+
+    /// Path where the model GGUF file lives (or will live after download).
+    pub fn model_file_path(&self, model_id: &str) -> PathBuf {
+        self.model_dir().join(format!("{}.gguf", model_id))
+    }
+
+    /// Path where the llama-server binary lives (or will live after download).
+    pub fn llama_server_binary_path(&self) -> PathBuf {
+        self.bin_dir().join("llama-server.exe")
+    }
+
+    /// Path where the llama-server zip is cached during download.
+    fn llama_server_zip_path(&self) -> PathBuf {
+        self.bin_dir().join("llama-server.zip")
+    }
+
+    /// Download (if missing) + extract `llama-server.exe`. Reports progress
+    /// via `on_progress`; cancels if the guard's `cancel()` is called.
+    ///
+    /// `on_progress` is wrapped in an `Arc` so the future is `Send` when
+    /// invoked from a `tokio::spawn`'d task.
+    pub async fn ensure_llama_server(
+        &self,
+        guard: &DownloadGuard,
+        on_progress: Arc<dyn Fn(DownloadProgress) + Send + Sync>,
+    ) -> Result<PathBuf, DownloadError> {
+        let dest = self.llama_server_binary_path();
+        if dest.exists() {
+            // Already extracted — nothing to do.
+            return Ok(dest);
+        }
+        let zip_dest = self.llama_server_zip_path();
+        // Try mirrors in order until one works.
+        let mut last_err: Option<DownloadError> = None;
+        let urls: [&str; 1] = [LLAMA_SERVER_URL];
+        for url in urls.iter() {
+            match download::stream_to_file(
+                url,
+                &zip_dest,
+                None, // upstream release zip has no fixed sha256 we ship
+                guard.flag.clone(),
+                on_progress.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    last_err = None;
+                    break;
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&zip_dest);
+                    last_err = Some(e);
+                }
+            }
+        }
+        if let Some(e) = last_err {
+            return Err(e);
+        }
+        // Extract the zip.
+        let bin_dir = self.bin_dir();
+        std::fs::create_dir_all(&bin_dir)?;
+        let f = std::fs::File::open(&zip_dest)?;
+        let mut archive = zip::ZipArchive::new(f)
+            .map_err(|e| DownloadError::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+        // b3900 ships llama-server.exe at the root of the archive.
+        let target_name = "llama-server.exe";
+        let mut found = false;
+        for i in 0..archive.len() {
+            let mut entry = archive
+                .by_index(i)
+                .map_err(|e| DownloadError::Io(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            let name = entry.name().to_string();
+            let base = name.rsplit('/').next().unwrap_or(&name);
+            if base == target_name {
+                let mut out = std::fs::File::create(&dest)?;
+                std::io::copy(&mut entry, &mut out)?;
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            let _ = std::fs::remove_file(&zip_dest);
+            return Err(DownloadError::Io(io::Error::new(
+                io::ErrorKind::Other,
+                format!("llama-server.exe not found in zip"),
+            )));
+        }
+        let _ = std::fs::remove_file(&zip_dest);
+        Ok(dest)
+    }
+
+    /// Download the GGUF model file for `model_id`. Reports progress via
+    /// `on_progress`; cancels if the guard's `cancel()` is called.
+    ///
+    /// `on_progress` is wrapped in an `Arc` so the future is `Send` when
+    /// invoked from a `tokio::spawn`'d task.
+    pub async fn download_model(
+        &self,
+        model_id: &str,
+        guard: &DownloadGuard,
+        on_progress: Arc<dyn Fn(DownloadProgress) + Send + Sync>,
+    ) -> Result<PathBuf, DownloadError> {
+        let model = find_model(model_id)
+            .ok_or_else(|| DownloadError::Io(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("unknown fallback model: {}", model_id),
+            )))?;
+        let dest = self.model_file_path(model_id);
+        let urls = std::iter::once(model.primary_url).chain(model.mirror_urls.iter().copied());
+        let mut last_err: Option<DownloadError> = None;
+        for url in urls {
+            match download::stream_to_file(
+                url,
+                &dest,
+                if model.sha256.is_empty() { None } else { Some(model.sha256) },
+                guard.flag.clone(),
+                on_progress.clone(),
+            )
+            .await
+            {
+                Ok(_) => {
+                    last_err = None;
+                    break;
+                }
+                Err(e) => {
+                    let _ = std::fs::remove_file(&dest);
+                    last_err = Some(e);
+                }
+            }
+        }
+        if let Some(e) = last_err {
+            return Err(e);
+        }
+        Ok(dest)
+    }
+
+    /// Delete the downloaded model file (and any cached server zip) and
+    /// reset the phase to NotDownloaded.
+    pub fn remove_model(&self) -> io::Result<()> {
+        let mut g = self.inner.lock().unwrap();
+        // Kill the server first so the file isn't in use.
+        if let Some(mut child) = g.server_child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        g.server_started_at = None;
+        g.state.llama_server_path = None;
+        g.state.llama_server_port = None;
+        g.state.last_started_unix_ms = None;
+        // Remove all model files.
+        let dir = g.data_dir.join("llm").join("models");
+        if dir.exists() {
+            for entry in std::fs::read_dir(&dir)? {
+                let entry = entry?;
+                if entry.file_type()?.is_file() {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+        g.state.model_path = None;
+        g.state.phase = Phase::NotDownloaded;
+        g.state.last_error = None;
+        g.state.save(&g.data_dir.join("llm"))
+    }
+
+    /// Total size of the on-disk model files (sum of GGUF sizes). 0 if none.
+    pub fn model_files_size_bytes(&self) -> u64 {
+        let dir = self.model_dir();
+        if !dir.exists() {
+            return 0;
+        }
+        std::fs::read_dir(&dir)
+            .map(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .filter_map(|e| e.metadata().ok())
+                    .map(|m| m.len())
+                    .sum()
+            })
+            .unwrap_or(0)
+    }
+}
+
+/// RAII handle for an in-flight download. Dropping without calling
+/// `cancel()` is fine — the flag stays false and the download completes.
+/// Calling `cancel()` flips the flag; the download future then exits
+/// with `DownloadError::Cancelled` on its next chunk.
+pub struct DownloadGuard {
+    manager: FallbackManager,
+    flag: Arc<AtomicBool>,
+}
+
+impl DownloadGuard {
+    /// Flip the cancel flag. Does NOT remove the guard from the manager —
+    /// that happens when the download future exits and calls
+    /// `manager.clear_download()`.
+    pub fn cancel(&self) {
+        self.flag.store(true, Ordering::Relaxed);
+    }
+}
+
+impl Drop for DownloadGuard {
+    fn drop(&mut self) {
+        // Clear the manager's reference so subsequent `is_downloading()`
+        // returns false. The flag itself may still be held by a stranded
+        // download future, but it'll be observed and the future will exit.
+        self.manager.clear_download();
+    }
 }
 
 fn llama_server_path(data_dir: &Path) -> io::Result<PathBuf> {
@@ -358,6 +629,78 @@ mod tests {
         let mgr = FallbackManager::new(tmp_dir());
         mgr.kill_server();
         mgr.kill_server();
+    }
+
+    // --- v0.6.2 additions ---
+
+    #[test]
+    fn begin_download_records_stage_and_clears_on_drop() {
+        let mgr = FallbackManager::new(tmp_dir());
+        assert!(!mgr.is_downloading());
+        let guard = mgr.begin_download("model");
+        assert!(mgr.is_downloading());
+        assert_eq!(mgr.current_download_stage().as_deref(), Some("model"));
+        drop(guard);
+        assert!(!mgr.is_downloading());
+        assert!(mgr.current_download_stage().is_none());
+    }
+
+    #[test]
+    fn cancel_download_flips_flag_and_clears_state() {
+        let mgr = FallbackManager::new(tmp_dir());
+        let guard = mgr.begin_download("server");
+        assert!(mgr.cancel_download());
+        // Guard flag is shared (Arc), so it sees the cancel.
+        // After guard drop, manager slot should be clear.
+        drop(guard);
+        assert!(!mgr.is_downloading());
+    }
+
+    #[test]
+    fn cancel_download_returns_false_when_idle() {
+        let mgr = FallbackManager::new(tmp_dir());
+        assert!(!mgr.cancel_download());
+    }
+
+    #[test]
+    fn begin_download_replaces_prior_guard() {
+        let mgr = FallbackManager::new(tmp_dir());
+        let g1 = mgr.begin_download("model");
+        let g2 = mgr.begin_download("server");
+        // g1's flag should be flipped (cancelled).
+        // We can observe this via the AtomicBool directly via a small
+        // trick: the guard exposes nothing public, but we know cancel
+        // semantics from `cancel_download` — easier to assert stage.
+        assert_eq!(mgr.current_download_stage().as_deref(), Some("server"));
+        drop(g2);
+        drop(g1);
+        assert!(!mgr.is_downloading());
+    }
+
+    #[test]
+    fn model_file_path_uses_id() {
+        let mgr = FallbackManager::new(tmp_dir());
+        let p = mgr.model_file_path("qwen2.5-1.5b-instruct-q4km");
+        assert!(p.ends_with("qwen2.5-1.5b-instruct-q4km.gguf"));
+    }
+
+    #[test]
+    fn remove_model_resets_phase() {
+        let dir = tmp_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        let mgr = FallbackManager::new(dir.clone());
+        // Pretend we already downloaded a model.
+        let models = mgr.model_dir();
+        std::fs::create_dir_all(&models).unwrap();
+        std::fs::write(models.join("qwen2.5-1.5b-instruct-q4km.gguf"), b"fake").unwrap();
+        let _ = mgr.update_phase(Phase::Ready {
+            path: models.join("qwen2.5-1.5b-instruct-q4km.gguf"),
+            downloaded_at_unix_ms: 1,
+        });
+        assert!(mgr.model_files_size_bytes() > 0);
+        mgr.remove_model().unwrap();
+        assert_eq!(mgr.model_files_size_bytes(), 0);
+        assert!(matches!(mgr.state().phase, Phase::NotDownloaded));
     }
 }
 
