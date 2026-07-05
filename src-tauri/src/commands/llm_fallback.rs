@@ -17,6 +17,7 @@
 //! `llm_fallback_status` command (no change). Frontend re-fetches it
 //! whenever `llm:fallback:progress` fires.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -64,7 +65,7 @@ pub async fn llm_fallback_install_start(
 ) -> Result<InstallStartResult, AppError> {
     let _t = m::time(&state.metrics, "llm_fallback_install_start");
     let _user = llm_cmd::require_perm(&state, &token, "llm:manage")?;
-    let model = fallback::find_model(&model_id).ok_or_else(|| {
+    let model_spec = fallback::find_spec(&model_id).ok_or_else(|| {
         AppError::Validation(format!("unknown fallback model: {}", model_id))
     })?;
     let mgr = state.fallback.clone();
@@ -77,7 +78,7 @@ pub async fn llm_fallback_install_start(
             .unwrap_or(0);
         let model_size = std::fs::metadata(mgr.model_file_path(&model_id))
             .map(|m| m.len())
-            .unwrap_or(model.size_bytes);
+            .unwrap_or(model_spec.size_estimate_bytes);
         return Ok(InstallStartResult {
             model_id,
             model_size_bytes: model_size,
@@ -90,17 +91,25 @@ pub async fn llm_fallback_install_start(
     let model_id_owned = model_id.clone();
     let model_id_for_event = model_id.clone();
     let mgr_for_task = mgr.clone();
+    let cache_dir_for_task = state.fallback.llm_dir();
     // Spawn the actual download work on a separate task so the Tauri
     // command returns immediately and the UI can subscribe to events.
     tokio::spawn(async move {
-        run_install(app_clone, mgr_for_task, model_id_for_event, model_id_owned).await;
+        run_install(
+            app_clone,
+            mgr_for_task,
+            cache_dir_for_task,
+            model_id_for_event,
+            model_id_owned,
+        )
+        .await;
     });
 
     // Return the planned sizes so the UI can show "downloading X MB total".
     // llama-server b3900 zip is roughly 30MB; use a conservative upper bound.
     Ok(InstallStartResult {
         model_id,
-        model_size_bytes: model.size_bytes,
+        model_size_bytes: model_spec.size_estimate_bytes,
         server_size_bytes: 35_000_000,
         already_installed: false,
     })
@@ -109,6 +118,7 @@ pub async fn llm_fallback_install_start(
 async fn run_install(
     app: AppHandle,
     mgr: FallbackManager,
+    cache_dir: PathBuf,
     model_id: String,
     model_id_for_log: String,
 ) {
@@ -142,6 +152,26 @@ async fn run_install(
     }
 
     // Stage 2: download the GGUF model file.
+    //
+    // v0.6.4: resolve the model spec against HuggingFace to get a fresh
+    // download URL + SHA256. Cache hit (< 24h) returns instantly. Falls
+    // back to the spec's `size_estimate_bytes` if HF is unreachable so
+    // we don't block the install on a network blip.
+    let resolved = match fallback::resolve_spec(
+        fallback::find_spec(&model_id).expect("checked in install_start"),
+        &cache_dir,
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = mgr.update_phase(Phase::Error {
+                message: format!("resolve {}: {}", model_id, e),
+            });
+            emit_done(&app, &model_id, false, &format!("resolve: {}", e));
+            return;
+        }
+    };
     let stage = "model".to_string();
     let guard = mgr.begin_download(&stage);
     let app_for_progress = app.clone();
@@ -155,7 +185,7 @@ async fn run_install(
         );
     });
     let res = mgr
-        .download_model(&model_id, &guard, progress_cb)
+        .download_model(&resolved, &guard, progress_cb)
         .await;
     match res {
         Ok(path) => {
@@ -274,6 +304,21 @@ pub fn llm_fallback_disk_free(state: tauri::State<'_, AppState>) -> Result<u64, 
     let _t = m::time(&state.metrics, "llm_fallback_disk_free");
     let dir = state.fallback.data_dir();
     fs2::available_space(&dir).map_err(|e| AppError::Internal(format!("disk_free: {e}")))
+}
+
+/// Discover top-N trending GGUF-Instruct models from HuggingFace.
+/// Used by the "popular models" recommendation panel.
+#[tauri::command]
+pub async fn llm_fallback_discover_trending(
+    state: tauri::State<'_, AppState>,
+    _token: String,
+    limit: Option<usize>,
+) -> Result<Vec<fallback::TrendingModel>, AppError> {
+    let _t = m::time(&state.metrics, "llm_fallback_discover_trending");
+    let _user = llm_cmd::require_perm(&state, &_token, "llm:use")?;
+    fallback::discover_trending(limit.unwrap_or(12))
+        .await
+        .map_err(AppError::Internal)
 }
 
 // ---------------------------------------------------------------------

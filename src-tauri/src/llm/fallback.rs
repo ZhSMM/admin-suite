@@ -23,8 +23,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 pub mod download;
+pub mod registry;
 
 pub use download::{DownloadError, DownloadHandle, DownloadProgress};
+pub use registry::{
+    discover_trending, find_spec, resolve_repo, resolve_spec, ResolutionCache, ResolvedModel,
+    TrendingModel, MODELS as REGISTRY_MODELS,
+};
 
 /// Phase of the fallback model's lifecycle.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -39,62 +44,43 @@ pub enum Phase {
     HashMismatch { actual: String, expected: String },
 }
 
-/// A curated fallback model candidate.
-#[derive(Debug, Clone)]
-pub struct FallbackModel {
-    pub id: &'static str,
-    pub display_name: &'static str,
-    pub family: &'static str,
-    pub parameter_count: &'static str,
-    pub quantization: &'static str,
+/// Lightweight model summaries for the IPC mirror.
+/// Backed by `registry::MODELS` so the frontend gets fresh display info.
+#[derive(Debug, Serialize)]
+pub struct FallbackModelMirror {
+    pub id: String,
+    pub display_name: String,
     pub size_bytes: u64,
-    /// Empty string means "no checksum recorded yet" — verification is then skipped.
-    pub sha256: &'static str,
-    pub context_window: u32,
-    pub primary_url: &'static str,
-    pub mirror_urls: &'static [&'static str],
     pub min_ram_gb: u32,
+    pub primary_url: String,
+    pub parameter_count: String,
+    pub quantization: String,
+    pub family: String,
 }
 
-pub static MODELS: &[FallbackModel] = &[
-    FallbackModel {
-        id: "qwen2.5-1.5b-instruct-q4km",
-        display_name: "Qwen2.5 1.5B Instruct (Q4_K_M)",
-        family: "qwen2.5",
-        parameter_count: "1.5B",
-        quantization: "Q4_K_M",
-        size_bytes: 1_100_000_000,
-        sha256: "",
-        context_window: 8192,
-        primary_url: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        // Try HF mirror first (often faster than HF), then ModelScope (works
-        // when both HF and its mirror are blocked, e.g. in mainland China).
-        mirror_urls: &[
-            "https://hf-mirror.com/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            "https://www.modelscope.cn/models/qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        ],
-        min_ram_gb: 4,
-    },
-    FallbackModel {
-        id: "llama-3.2-3b-instruct-q4km",
-        display_name: "Llama 3.2 3B Instruct (Q4_K_M)",
-        family: "llama3.2",
-        parameter_count: "3B",
-        quantization: "Q4_K_M",
-        size_bytes: 2_050_000_000,
-        sha256: "",
-        context_window: 8192,
-        primary_url: "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-        mirror_urls: &[
-            "https://hf-mirror.com/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-            "https://www.modelscope.cn/models/LLM-Research/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-        ],
-        min_ram_gb: 6,
-    },
-];
+pub fn model_mirrors() -> Vec<FallbackModelMirror> {
+    REGISTRY_MODELS
+        .iter()
+        .map(|s| FallbackModelMirror {
+            id: s.id.to_string(),
+            display_name: s.display_name.to_string(),
+            size_bytes: s.size_estimate_bytes,
+            min_ram_gb: s.min_ram_gb,
+            // Best-effort default URL; real download uses resolve_spec() at
+            // install time which queries HuggingFace for the actual blob.
+            primary_url: format!(
+                "https://huggingface.co/{}/resolve/main/{}",
+                s.hf_repo, s.preferred_file_glob.replace('*', "")
+            ),
+            parameter_count: s.parameter_count.to_string(),
+            quantization: s.quantization.to_string(),
+            family: s.family.to_string(),
+        })
+        .collect()
+}
 
-pub fn find_model(id: &str) -> Option<&'static FallbackModel> {
-    MODELS.iter().find(|m| m.id == id)
+pub fn find_model(id: &str) -> Option<&'static registry::FallbackModelSpec> {
+    registry::find_spec(id)
 }
 
 /// llama-server version we pin to. Bump these when upgrading the runtime.
@@ -272,7 +258,7 @@ impl FallbackManager {
             .arg("--model").arg(&model_path)
             .arg("--port").arg(port.to_string())
             .arg("--host").arg("127.0.0.1")
-            .arg("--ctx-size").arg(model.context_window.to_string())
+            .arg("--ctx-size").arg("8192")
             .arg("-ngl").arg("20")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -454,30 +440,29 @@ impl FallbackManager {
         Ok(dest)
     }
 
-    /// Download the GGUF model file for `model_id`. Reports progress via
+    /// Download the GGUF model file for `resolved`. Reports progress via
     /// `on_progress`; cancels if the guard's `cancel()` is called.
     ///
-    /// `on_progress` is wrapped in an `Arc` so the future is `Send` when
-    /// invoked from a `tokio::spawn`'d task.
+    /// The caller is responsible for `resolve_spec()` / `resolve_repo()`
+    /// BEFORE invoking this — we no longer accept a bare model_id because
+    /// URLs are no longer hardcoded; they come from the HuggingFace API
+    /// (or its mirrors) and may rotate between releases.
     pub async fn download_model(
         &self,
-        model_id: &str,
+        resolved: &ResolvedModel,
         guard: &DownloadGuard,
         on_progress: Arc<dyn Fn(DownloadProgress) + Send + Sync>,
     ) -> Result<PathBuf, DownloadError> {
-        let model = find_model(model_id)
-            .ok_or_else(|| DownloadError::Io(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("unknown fallback model: {}", model_id),
-            )))?;
-        let dest = self.model_file_path(model_id);
-        let urls = std::iter::once(model.primary_url).chain(model.mirror_urls.iter().copied());
+        let dest = self.model_file_path(&resolved.id);
+        let urls = std::iter::once(resolved.primary_url.as_str()).chain(
+            resolved.mirrors.iter().map(|s| s.as_str()),
+        );
         let mut last_err: Option<DownloadError> = None;
         for url in urls {
             match download::stream_to_file(
                 url,
                 &dest,
-                if model.sha256.is_empty() { None } else { Some(model.sha256) },
+                resolved.sha256.as_deref(),
                 guard.flag.clone(),
                 on_progress.clone(),
             )
@@ -623,7 +608,7 @@ mod tests {
 
     #[test]
     fn find_model_by_id() {
-        assert!(find_model("qwen2.5-1.5b-instruct-q4km").is_some());
+        assert!(find_model("qwen2.5-1.5b-instruct").is_some());
         assert!(find_model("nonexistent").is_none());
     }
 

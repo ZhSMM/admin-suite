@@ -935,30 +935,17 @@ pub struct FallbackMirror {
     pub models: Vec<FallbackModelMirror>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct FallbackModelMirror {
-    pub id: &'static str,
-    pub display_name: &'static str,
-    pub size_bytes: u64,
-    pub min_ram_gb: u32,
-    pub primary_url: &'static str,
-}
+// Re-export the canonical FallbackModelMirror from the fallback module
+// so the IPC layer uses one definition. Keeping both here would create
+// a duplicate-type ambiguity at the `Vec<FallbackModelMirror>` site.
+pub use fallback::FallbackModelMirror;
 
 #[tauri::command]
 pub fn llm_fallback_status(state: State<AppState>) -> Result<FallbackMirror, AppError> {
     let _t = m::time(&state.metrics, "llm_fallback_status");
     let mgr = state.fallback.clone();
     let state_clone = mgr.state();
-    let models = fallback::MODELS
-        .iter()
-        .map(|m| FallbackModelMirror {
-            id: m.id,
-            display_name: m.display_name,
-            size_bytes: m.size_bytes,
-            min_ram_gb: m.min_ram_gb,
-            primary_url: m.primary_url,
-        })
-        .collect();
+    let models = fallback::model_mirrors();
     Ok(FallbackMirror { state: state_clone, models })
 }
 
