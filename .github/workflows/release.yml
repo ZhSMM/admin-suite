@@ -92,7 +92,13 @@ jobs:
             > Change the password on first login.
           releaseDraft: false
           prerelease: false
-          tauriUpdaterActive: true
+          # Auto-update bundling is opt-in: it requires the
+          # TAURI_SIGNING_PRIVATE_KEY repo secret to sign `latest.json` and
+          # the .msi.zip / .nsis.zip bundles. Until the secret is set, we
+          # ship installers only and the in-app updater will report "no
+          # update available" (the rest of the IPC monitoring + crash
+          # diagnostics features are unaffected).
+          tauriUpdaterActive: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
           args: ${{ matrix.args }}
 
       # On workflow_dispatch (no tag) the tauri-action has nothing to attach to.
