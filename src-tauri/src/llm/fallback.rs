@@ -97,9 +97,18 @@ pub fn find_model(id: &str) -> Option<&'static FallbackModel> {
     MODELS.iter().find(|m| m.id == id)
 }
 
-pub const LLAMA_SERVER_VERSION: &str = "b3900";
+/// llama-server version we pin to. Bump these when upgrading the runtime.
+/// Note: the GitHub repo moved from `ggerganov/llama.cpp` to
+/// `ggml-org/llama.cpp` around late 2025 — make sure URLs use the new path.
+pub const LLAMA_SERVER_VERSION: &str = "b9873";
+/// Vulkan build is the best default: ~30 MB, runs on any GPU vendor
+/// (NVIDIA / AMD / Intel), and still CPU-fallbacks when no GPU is present.
+/// If the user needs NVIDIA CUDA specifically, switch the URL at runtime.
 pub const LLAMA_SERVER_URL: &str =
-    "https://github.com/ggerganov/llama.cpp/releases/download/b3900/llama-b3900-bin-win-cuda-cu12.4-x64.zip";
+    "https://github.com/ggml-org/llama.cpp/releases/download/b9873/llama-b9873-bin-win-vulkan-x64.zip";
+/// Fallback if vulkan build fails: pure CPU build (16 MB, no GPU).
+pub const LLAMA_SERVER_URL_CPU: &str =
+    "https://github.com/ggml-org/llama.cpp/releases/download/b9873/llama-b9873-bin-win-cpu-x64.zip";
 
 /// On-disk state — written to `<data_dir>/llm/fallback_state.json`.
 ///
@@ -386,9 +395,9 @@ impl FallbackManager {
             return Ok(dest);
         }
         let zip_dest = self.llama_server_zip_path();
-        // Try mirrors in order until one works.
+        // Try URLs in order: vulkan first (best default), CPU as fallback.
+        let urls: [&str; 2] = [LLAMA_SERVER_URL, LLAMA_SERVER_URL_CPU];
         let mut last_err: Option<DownloadError> = None;
-        let urls: [&str; 1] = [LLAMA_SERVER_URL];
         for url in urls.iter() {
             match download::stream_to_file(
                 url,
