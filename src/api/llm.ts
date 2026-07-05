@@ -127,13 +127,18 @@ export interface LlmUsageRow {
 export interface FallbackState {
   enabled: boolean
   selected_model_id: string | null
-  // The Rust side serializes `Phase` with `rename_all = "snake_case"`, so
-  // every variant key comes through lower-case. Keep this in sync if the
-  // enum gains new variants — otherwise `'<X>' in p` will throw at runtime.
+  // The Rust side serializes `Phase` with `rename_all = "snake_case"`.
+  // Unit variants (no fields) come through as bare strings:
+  //   "not_downloaded" | "verifying"
+  // Struct variants come through as objects with the variant name as key:
+  //   { downloading: {...} } | { ready: {...} } | { error: {...} } |
+  //   { hash_mismatch: {...} }
+  // Helpers in LocalModelPanel.vue (`phaseIs` / `phaseHas`) handle both
+  // shapes so the UI doesn't crash on either form.
   phase:
-    | { not_downloaded: null }
+    | 'not_downloaded'
+    | 'verifying'
     | { downloading: { bytes_done: number; total_bytes: number; speed_bps: number; eta_seconds: number } }
-    | { verifying: null }
     | { ready: { path: string; downloaded_at_unix_ms: number } }
     | { error: { message: string } }
     | { hash_mismatch: { actual: string; expected: string } }

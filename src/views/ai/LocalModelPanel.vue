@@ -186,7 +186,13 @@ const selectedModelSize = computed(() => {
 
 const isReady = computed(() => {
   const p = llm.fallbackState?.phase
-  return p != null && 'ready' in p
+  // Rust serializes Phase as either:
+  //   - a bare string for unit variants: "not_downloaded" | "verifying"
+  //   - an object for struct variants:    { ready: {...} } | { error: {...} }
+  // We check both shapes here so the UI doesn't crash on either form.
+  if (p == null) return false
+  if (typeof p === 'object') return 'ready' in p
+  return false
 })
 
 const serverRunning = computed(() => {
@@ -209,26 +215,33 @@ const showInstallButton = computed(
 
 const statusLabel = computed(() => {
   const p = llm.fallbackState?.phase
-  if (!p) return t('settings.ai.fallback.statusUnknown')
-  if ('not_downloaded' in p) return t('settings.ai.fallback.statusNotInstalled')
-  if ('downloading' in p) return t('settings.ai.fallback.statusDownloading')
-  if ('verifying' in p) return t('settings.ai.fallback.statusVerifying')
-  if ('ready' in p) {
-    return serverRunning.value
-      ? t('settings.ai.fallback.statusRunning')
-      : t('settings.ai.fallback.statusReady')
+  if (p == null) return t('settings.ai.fallback.statusUnknown')
+  // Struct variants — check the object key first so TS narrows correctly.
+  if (typeof p === 'object') {
+    if ('downloading' in p) return t('settings.ai.fallback.statusDownloading')
+    if ('ready' in p) {
+      return serverRunning.value
+        ? t('settings.ai.fallback.statusRunning')
+        : t('settings.ai.fallback.statusReady')
+    }
+    if ('error' in p) return t('settings.ai.fallback.statusError')
+    if ('hash_mismatch' in p) return t('settings.ai.fallback.statusHashMismatch')
   }
-  if ('error' in p) return t('settings.ai.fallback.statusError')
-  if ('hash_mismatch' in p) return t('settings.ai.fallback.statusHashMismatch')
+  // Bare-string unit variants:
+  if (p === 'not_downloaded') return t('settings.ai.fallback.statusNotInstalled')
+  if (p === 'verifying') return t('settings.ai.fallback.statusVerifying')
   return t('settings.ai.fallback.statusUnknown')
 })
 
 const statusTagType = computed(() => {
   const p = llm.fallbackState?.phase
-  if (!p) return 'info'
-  if ('ready' in p) return serverRunning.value ? 'success' : 'info'
-  if ('error' in p || 'hash_mismatch' in p) return 'danger'
-  if ('downloading' in p || 'verifying' in p) return 'warning'
+  if (p == null) return 'info'
+  if (p === 'verifying') return 'warning'
+  if (typeof p === 'object') {
+    if ('ready' in p) return serverRunning.value ? 'success' : 'info'
+    if ('error' in p || 'hash_mismatch' in p) return 'danger'
+    if ('downloading' in p) return 'warning'
+  }
   return 'info'
 })
 
