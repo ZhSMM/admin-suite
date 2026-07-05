@@ -127,13 +127,16 @@ export interface LlmUsageRow {
 export interface FallbackState {
   enabled: boolean
   selected_model_id: string | null
+  // The Rust side serializes `Phase` with `rename_all = "snake_case"`, so
+  // every variant key comes through lower-case. Keep this in sync if the
+  // enum gains new variants — otherwise `'<X>' in p` will throw at runtime.
   phase:
-    | { NotDownloaded: null }
-    | { Downloading: { bytes_done: number; total_bytes: number; speed_bps: number; eta_seconds: number } }
-    | { Verifying: null }
-    | { Ready: { path: string; downloaded_at_unix_ms: number } }
-    | { Error: { message: string } }
-    | { HashMismatch: { actual: string; expected: string } }
+    | { not_downloaded: null }
+    | { downloading: { bytes_done: number; total_bytes: number; speed_bps: number; eta_seconds: number } }
+    | { verifying: null }
+    | { ready: { path: string; downloaded_at_unix_ms: number } }
+    | { error: { message: string } }
+    | { hash_mismatch: { actual: string; expected: string } }
   model_path: string | null
   llama_server_path: string | null
   llama_server_port: number | null

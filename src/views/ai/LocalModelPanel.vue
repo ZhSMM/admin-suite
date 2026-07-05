@@ -186,7 +186,7 @@ const selectedModelSize = computed(() => {
 
 const isReady = computed(() => {
   const p = llm.fallbackState?.phase
-  return p != null && 'Ready' in p
+  return p != null && 'ready' in p
 })
 
 const serverRunning = computed(() => {
@@ -210,25 +210,25 @@ const showInstallButton = computed(
 const statusLabel = computed(() => {
   const p = llm.fallbackState?.phase
   if (!p) return t('settings.ai.fallback.statusUnknown')
-  if ('NotDownloaded' in p) return t('settings.ai.fallback.statusNotInstalled')
-  if ('Downloading' in p) return t('settings.ai.fallback.statusDownloading')
-  if ('Verifying' in p) return t('settings.ai.fallback.statusVerifying')
-  if ('Ready' in p) {
+  if ('not_downloaded' in p) return t('settings.ai.fallback.statusNotInstalled')
+  if ('downloading' in p) return t('settings.ai.fallback.statusDownloading')
+  if ('verifying' in p) return t('settings.ai.fallback.statusVerifying')
+  if ('ready' in p) {
     return serverRunning.value
       ? t('settings.ai.fallback.statusRunning')
       : t('settings.ai.fallback.statusReady')
   }
-  if ('Error' in p) return t('settings.ai.fallback.statusError')
-  if ('HashMismatch' in p) return t('settings.ai.fallback.statusHashMismatch')
+  if ('error' in p) return t('settings.ai.fallback.statusError')
+  if ('hash_mismatch' in p) return t('settings.ai.fallback.statusHashMismatch')
   return t('settings.ai.fallback.statusUnknown')
 })
 
 const statusTagType = computed(() => {
   const p = llm.fallbackState?.phase
   if (!p) return 'info'
-  if ('Ready' in p) return serverRunning.value ? 'success' : 'info'
-  if ('Error' in p || 'HashMismatch' in p) return 'danger'
-  if ('Downloading' in p || 'Verifying' in p) return 'warning'
+  if ('ready' in p) return serverRunning.value ? 'success' : 'info'
+  if ('error' in p || 'hash_mismatch' in p) return 'danger'
+  if ('downloading' in p || 'verifying' in p) return 'warning'
   return 'info'
 })
 
