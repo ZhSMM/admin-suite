@@ -2,6 +2,7 @@ pub mod audit;
 pub mod auth;
 pub mod backup;
 pub mod crash;
+pub mod llm;
 pub mod menus;
 pub mod metrics;
 pub mod migrate_cmd;

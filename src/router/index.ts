@@ -106,6 +106,30 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true, permission: 'updater:check', title: 'menu.updater' }
       },
       {
+        path: 'system/llm/providers',
+        name: 'llm-providers',
+        component: () => import('@/views/admin/LlmProviders.vue'),
+        meta: { requiresAuth: true, permission: 'llm:manage', title: 'menu.llm.providers' }
+      },
+      {
+        path: 'system/llm/models',
+        name: 'llm-models',
+        component: () => import('@/views/admin/LlmModels.vue'),
+        meta: { requiresAuth: true, permission: 'llm:manage', title: 'menu.llm.models' }
+      },
+      {
+        path: 'system/llm/usage',
+        name: 'llm-usage',
+        component: () => import('@/views/admin/LlmUsage.vue'),
+        meta: { requiresAuth: true, permission: 'llm:usage:read', title: 'menu.llm.usage' }
+      },
+      {
+        path: 'ai/chat',
+        name: 'ai-chat',
+        component: () => import('@/views/ai/Chat.vue'),
+        meta: { requiresAuth: true, permission: 'llm:use', title: 'menu.ai.chat' }
+      },
+      {
         path: 'tools/base',
         name: 'tool-base',
         component: () => import('@/views/tools/BaseConvert.vue'),

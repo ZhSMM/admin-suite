@@ -6,8 +6,10 @@
 
 mod auth;
 mod commands;
+mod crypto;
 mod db;
 mod error;
+mod llm;
 mod models;
 
 use std::path::PathBuf;
@@ -22,6 +24,7 @@ use crate::commands::auth as auth_cmd;
 use crate::commands::audit as audit_cmd;
 use crate::commands::backup as backup_cmd;
 use crate::commands::crash::{self as crash_cmd, CrashStore};
+use crate::commands::llm::{self as llm_cmd};
 use crate::commands::menus as menus_cmd;
 use crate::commands::metrics::{self as metrics, SharedMetrics};
 use crate::commands::migrate_cmd as migrate_cmd;
@@ -33,6 +36,9 @@ use crate::commands::updater as updater_cmd;
 use crate::commands::users as users_cmd;
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
+use crate::llm::fallback::FallbackManager;
+
+use self::crypto::MasterKey;
 
 /// Shared application state, accessible from every command via `State<AppState>`.
 pub struct AppState {
@@ -47,6 +53,12 @@ pub struct AppState {
     /// `<data_dir>/crashes/`. The panic hook is installed in `run()` so every
     /// panic that escapes a command is captured.
     pub crashes: Arc<CrashStore>,
+    /// AES-GCM master key for encrypting LLM API keys at rest. Lives only in
+    /// memory after being loaded from `<config_dir>/.llm_master_key`.
+    pub master_key: Arc<MasterKey>,
+    /// Local fallback engine — manages GGUF model download + llama-server
+    /// lifecycle. Persists state to `<data_dir>/llm/fallback_state.json`.
+    pub fallback: FallbackManager,
 }
 
 const DEFAULT_ADMIN_USERNAME: &str = "admin";
@@ -648,6 +660,10 @@ pub fn run() {
         data_dir.join("migrations")
     });
 
+    let config_dir = data_dir.join("config");
+    let master_key = MasterKey::load_or_create(&config_dir).expect("init master key");
+    let fallback = FallbackManager::new(data_dir.clone());
+
     let state = AppState {
         db,
         sessions,
@@ -658,6 +674,8 @@ pub fn run() {
             crash_cmd::CrashStore::new(&data_dir)
                 .expect("init crash store"),
         ),
+        master_key: Arc::new(master_key),
+        fallback,
     };
 
     // Install the panic hook AFTER CrashStore is constructed — any panic that
@@ -717,6 +735,25 @@ pub fn run() {
             crash_clear,
             updater_check,
             updater_install,
+            // LLM v0.6.0
+            llm_cmd::llm_providers_list,
+            llm_cmd::llm_providers_get,
+            llm_cmd::llm_providers_create,
+            llm_cmd::llm_providers_update,
+            llm_cmd::llm_providers_delete,
+            llm_cmd::llm_models_list,
+            llm_cmd::llm_models_get,
+            llm_cmd::llm_models_create,
+            llm_cmd::llm_models_update,
+            llm_cmd::llm_models_delete,
+            llm_cmd::llm_chat,
+            llm_cmd::llm_chat_stream,
+            llm_cmd::llm_usage_query,
+            llm_cmd::llm_fallback_status,
+            llm_cmd::llm_fallback_select_model,
+            llm_cmd::llm_fallback_set_enabled,
+            llm_cmd::llm_fallback_dismiss_startup_prompt,
+            llm_cmd::llm_fallback_startup_prompt_needed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
