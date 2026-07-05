@@ -154,14 +154,16 @@ jobs:
 
       # On workflow_dispatch (no tag) the tauri-action has nothing to attach to.
       # Upload artifacts manually so manual runs are still useful.
+      # Note: we build NSIS only (bundle.targets = ["nsis"]) — MSI requires
+      # WiX which has been flaky on GitHub Actions runners. NSIS produces a
+      # single .exe installer that works for both per-user and system-wide
+      # installs (it prompts for elevation when needed).
       - name: Upload artifacts (manual run)
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: admin-suite-windows-${{ matrix.target }}
           path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi.zip
             src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
             src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.nsis.zip
             src-tauri/target/${{ matrix.target }}/release/bundle/latest.json

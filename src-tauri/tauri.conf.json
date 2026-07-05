@@ -39,7 +39,7 @@
       },
       "resources": ["migrations/**/*"],
       "shortDescription": "Admin suite",
-      "targets": "all",
+      "targets": ["nsis"],
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
