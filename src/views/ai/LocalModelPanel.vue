@@ -107,6 +107,9 @@
           <el-button :icon="Connection" :loading="speedTesting" @click="runSpeedTest">
             {{ t('settings.ai.fallback.testSpeed') }}
           </el-button>
+          <el-button :icon="FolderOpened" @click="onPickLocalFile">
+            {{ t('settings.ai.fallback.importLocal') }}
+          </el-button>
         </template>
 
         <template v-else-if="isInstalling">
@@ -195,7 +198,8 @@ import {
   VideoPause,
   Delete,
   CircleClose,
-  Connection
+  Connection,
+  FolderOpened
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -402,6 +406,24 @@ async function onInstall() {
 async function onCancel() {
   await llm.cancelInstall(auth.token || '')
   ElMessage.info(t('settings.ai.fallback.cancelled'))
+}
+
+async function onPickLocalFile() {
+  if (!selectedModelId.value) return
+  // Use Tauri's open dialog so we get a real native file picker.
+  const { open } = await import('@tauri-apps/api/dialog')
+  const picked = await open({
+    multiple: false,
+    directory: false,
+    filters: [{ name: 'GGUF', extensions: ['gguf'] }]
+  })
+  if (!picked || typeof picked !== 'string') return
+  try {
+    await llm.importLocal(auth.token || '', selectedModelId.value, picked)
+    ElMessage.success(t('settings.ai.fallback.importSuccess'))
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : String(e))
+  }
 }
 
 async function onStartServer() {

@@ -703,6 +703,8 @@ export default {
   'settings.ai.fallback.speedMbps': 'Speed',
   'settings.ai.fallback.speedUrl': 'URL',
   'settings.ai.fallback.speedHint': 'Fastest mirror: {mirror} ({speed}). Install will use this.',
+  'settings.ai.fallback.importLocal': 'Import local file…',
+  'settings.ai.fallback.importSuccess': 'Model imported successfully.',
 
   'settings.ai.help': 'Per-tool default models. Per-user picks made in the AI tools override these.',
   'settings.ai.defaultChat': 'Default Chat model',

@@ -723,6 +723,8 @@ export default {
   'settings.ai.fallback.speedMbps': '速度',
   'settings.ai.fallback.speedUrl': 'URL',
   'settings.ai.fallback.speedHint': '最快镜像:{mirror} ({speed})。安装将使用此镜像。',
+  'settings.ai.fallback.importLocal': '导入本地文件…',
+  'settings.ai.fallback.importSuccess': '模型导入成功。',
 
   'settings.ai.help': '每个 AI 工具的默认模型。用户在 AI 工具里手动选过的会覆盖这里的设置。',
   'settings.ai.defaultChat': 'Chat 默认模型',

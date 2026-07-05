@@ -774,6 +774,7 @@ pub fn run() {
             llm_fallback::llm_fallback_disk_free,
             llm_fallback::llm_fallback_discover_trending,
             llm_fallback::llm_fallback_speed_test,
+            llm_fallback::llm_fallback_import_local,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

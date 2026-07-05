@@ -268,6 +268,16 @@ export const useLlmStore = defineStore('llm', {
         this.installError = e instanceof Error ? e.message : String(e)
         return []
       }
+    },
+    async importLocal(token: string, modelId: string, sourcePath: string, expectedSha256?: string): Promise<number> {
+      try {
+        return await llmApi.fallbackImportLocal(token, modelId, sourcePath, expectedSha256)
+      } catch (e) {
+        this.installError = e instanceof Error ? e.message : String(e)
+        throw e
+      } finally {
+        await this.refreshFallback(token)
+      }
     }
   }
 })

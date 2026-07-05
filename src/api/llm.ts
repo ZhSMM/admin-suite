@@ -233,7 +233,14 @@ export const llmApi = {
     call<SpeedTestResult[]>(
       'llm_fallback_speed_test',
       { token, modelId, manualUrl: manualUrl ?? null }
-    )
+    ),
+  fallbackImportLocal: (token: string, modelId: string, sourcePath: string, expectedSha256?: string) =>
+    call<number>('llm_fallback_import_local', {
+      token,
+      modelId,
+      sourcePath,
+      expectedSha256: expectedSha256 ?? null
+    })
 }
 
 export interface SpeedTestResult {
