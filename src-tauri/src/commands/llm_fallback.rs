@@ -153,11 +153,11 @@ async fn run_install(
 
     // Stage 2: download the GGUF model file.
     //
-    // v0.6.4: resolve the model spec against HuggingFace to get a fresh
-    // download URL + SHA256. Cache hit (< 24h) returns instantly. Falls
-    // back to the spec's `size_estimate_bytes` if HF is unreachable so
-    // we don't block the install on a network blip.
-    let resolved = match fallback::resolve_spec(
+    // v0.6.5: resolve the model spec against HuggingFace, then probe
+    // every mirror's actual download speed and promote the fastest to
+    // primary. For users in CN / regions where HF is throttled, this
+    // reroutes the install to a fast mirror without any user action.
+    let resolved = match fallback::resolve_spec_with_speedtest(
         fallback::find_spec(&model_id).expect("checked in install_start"),
         &cache_dir,
     )
@@ -319,6 +319,52 @@ pub async fn llm_fallback_discover_trending(
     fallback::discover_trending(limit.unwrap_or(12))
         .await
         .map_err(AppError::Internal)
+}
+
+/// Speed-test every mirror for the given model_id (or for a single URL
+/// if `manual_url` is set). Downloads ~1 MiB from each, returns speed
+/// for the UI to rank.
+#[tauri::command]
+pub async fn llm_fallback_speed_test(
+    state: tauri::State<'_, AppState>,
+    _token: String,
+    model_id: String,
+    manual_url: Option<String>,
+) -> Result<Vec<fallback::SpeedTestResult>, AppError> {
+    let _t = m::time(&state.metrics, "llm_fallback_speed_test");
+    let _user = llm_cmd::require_perm(&state, &_token, "llm:use")?;
+    let mut urls: Vec<(&str, &str)> = Vec::new();
+    if let Some(u) = manual_url.as_deref() {
+        urls.push((u, "manual"));
+    } else {
+        // Resolve the model spec to get the primary URL + mirrors.
+        let spec = fallback::find_spec(&model_id)
+            .ok_or_else(|| AppError::Validation(format!("unknown model: {model_id}")))?;
+        // Try cache first; if miss, do a best-effort resolve.
+        let cache_dir = state.fallback.llm_dir();
+        let resolved = fallback::resolve_spec(spec, &cache_dir).await.ok();
+        if let Some(r) = resolved {
+            urls.push((Box::leak(r.primary_url.into_boxed_str()), "primary"));
+            for m in &r.mirrors {
+                let s: &str = Box::leak(m.clone().into_boxed_str());
+                let label = if m.contains("hf-mirror") { "hf-mirror" } else if m.contains("modelscope") { "modelscope" } else { "mirror" };
+                urls.push((s, label));
+            }
+        } else {
+            // Fallback: construct a known URL from the spec.
+            let url = format!(
+                "https://huggingface.co/{}/resolve/main/{}",
+                spec.hf_repo,
+                spec.preferred_file_glob.replace('*', "")
+            );
+            urls.push((Box::leak(url.into_boxed_str()), "primary"));
+        }
+    }
+    let mut results = Vec::with_capacity(urls.len());
+    for (url, label) in urls {
+        results.push(fallback::speed_test_url(url, label).await);
+    }
+    Ok(results)
 }
 
 // ---------------------------------------------------------------------

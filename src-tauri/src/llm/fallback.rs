@@ -27,8 +27,9 @@ pub mod registry;
 
 pub use download::{DownloadError, DownloadHandle, DownloadProgress};
 pub use registry::{
-    discover_trending, find_spec, resolve_repo, resolve_spec, ResolutionCache, ResolvedModel,
-    TrendingModel, MODELS as REGISTRY_MODELS,
+    discover_trending, find_spec, resolve_repo, resolve_spec, resolve_spec_with_speedtest,
+    speed_test_url, ResolutionCache, ResolvedModel, SpeedTestResult, TrendingModel,
+    MODELS as REGISTRY_MODELS,
 };
 
 /// Phase of the fallback model's lifecycle.

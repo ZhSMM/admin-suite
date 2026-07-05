@@ -228,5 +228,20 @@ export const llmApi = {
     call<void>('llm_fallback_server_stop', { token }),
   fallbackRemove: (token: string) =>
     call<void>('llm_fallback_remove', { token }),
-  fallbackDiskFree: () => call<number>('llm_fallback_disk_free')
+  fallbackDiskFree: () => call<number>('llm_fallback_disk_free'),
+  fallbackSpeedTest: (token: string, modelId: string, manualUrl?: string) =>
+    call<SpeedTestResult[]>(
+      'llm_fallback_speed_test',
+      { token, modelId, manualUrl: manualUrl ?? null }
+    )
+}
+
+export interface SpeedTestResult {
+  url: string
+  label: string
+  reachable: boolean
+  bytesDownloaded: number
+  elapsedMs: number
+  speedBps: number
+  error: string | null
 }

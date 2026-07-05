@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { llmApi, type ChatMessage, type LlmModel, type LlmProvider, type FallbackMirror, type FallbackState } from '@/api/llm'
+import { llmApi, type ChatMessage, type LlmModel, type LlmProvider, type FallbackMirror, type FallbackState, type SpeedTestResult } from '@/api/llm'
 import { settingsApi } from '@/api/settings'
 
 export interface FallbackProgress {
@@ -259,6 +259,14 @@ export const useLlmStore = defineStore('llm', {
         return await llmApi.fallbackDiskFree()
       } catch {
         return null
+      }
+    },
+    async speedTest(token: string, modelId: string, manualUrl?: string): Promise<SpeedTestResult[]> {
+      try {
+        return await llmApi.fallbackSpeedTest(token, modelId, manualUrl)
+      } catch (e) {
+        this.installError = e instanceof Error ? e.message : String(e)
+        return []
       }
     }
   }

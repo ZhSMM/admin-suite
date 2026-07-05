@@ -104,6 +104,9 @@
           >
             {{ t('settings.ai.fallback.install') }}
           </el-button>
+          <el-button :icon="Connection" :loading="speedTesting" @click="runSpeedTest">
+            {{ t('settings.ai.fallback.testSpeed') }}
+          </el-button>
         </template>
 
         <template v-else-if="isInstalling">
@@ -131,6 +134,45 @@
         </template>
       </el-form-item>
 
+      <!-- Speed test results -->
+      <div v-if="speedResults.length > 0" class="speed-results">
+        <el-table :data="speedResults" size="small" border>
+          <el-table-column :label="t('settings.ai.fallback.speedMirror')" prop="label" width="120">
+            <template #default="{ row }">
+              <el-tag v-if="row === bestMirror" type="success" size="small">
+                ★ {{ row.label }}
+              </el-tag>
+              <span v-else>{{ row.label }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('settings.ai.fallback.speedReachable')" width="100">
+            <template #default="{ row }">
+              <el-tag v-if="row.reachable" type="success" size="small">
+                {{ t('settings.ai.fallback.speedOk') }}
+              </el-tag>
+              <el-tooltip v-else :content="row.error || ''">
+                <el-tag type="danger" size="small">{{ t('settings.ai.fallback.speedFail') }}</el-tag>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('settings.ai.fallback.speedMbps')" width="140">
+            <template #default="{ row }">
+              <span v-if="row.reachable">{{ formatSpeed(row.speedBps) }}</span>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('settings.ai.fallback.speedUrl')" prop="url" show-overflow-tooltip />
+        </el-table>
+        <div v-if="bestMirror" class="speed-hint">
+          <el-alert
+            :title="t('settings.ai.fallback.speedHint', { mirror: bestMirror.label, speed: formatSpeed(bestMirror.speedBps) })"
+            type="success"
+            :closable="false"
+            show-icon
+          />
+        </div>
+      </div>
+
       <el-alert
         v-if="llm.installError"
         :title="llm.installError"
@@ -152,7 +194,8 @@ import {
   VideoPlay,
   VideoPause,
   Delete,
-  CircleClose
+  CircleClose,
+  Connection
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -297,6 +340,27 @@ async function refreshDiskFree() {
   diskFree.value = await llm.fetchDiskFree()
 }
 
+// ---- v0.6.5: speed-test mirrors ----
+const speedResults = ref<import('@/api/llm').SpeedTestResult[]>([])
+const speedTesting = ref(false)
+
+async function runSpeedTest() {
+  if (!selectedModelId.value) return
+  speedTesting.value = true
+  speedResults.value = []
+  try {
+    speedResults.value = await llm.speedTest(auth.token || '', selectedModelId.value)
+  } finally {
+    speedTesting.value = false
+  }
+}
+
+const bestMirror = computed(() => {
+  const reachable = speedResults.value.filter((r) => r.reachable && r.speedBps > 0)
+  if (reachable.length === 0) return null
+  return reachable.reduce((a, b) => (a.speedBps >= b.speedBps ? a : b))
+})
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
@@ -432,6 +496,12 @@ async function onRemove() {
   }
 }
 .stall-hint {
+  margin-top: 8px;
+}
+.speed-results {
+  margin-top: 12px;
+}
+.speed-hint {
   margin-top: 8px;
 }
 </style>

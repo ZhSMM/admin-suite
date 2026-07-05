@@ -332,6 +332,108 @@ pub async fn head_url_meta(url: &str) -> Result<(u64, Option<String>), String> {
     Ok((size, sha))
 }
 
+/// Speed-test result for a single URL.
+#[derive(Debug, Clone, Serialize)]
+pub struct SpeedTestResult {
+    pub url: String,
+    pub label: String, // "primary" | "hf-mirror" | "modelscope" | "manual"
+    pub reachable: bool,
+    pub bytes_downloaded: u64,
+    pub elapsed_ms: u64,
+    pub speed_bps: u64,
+    pub error: Option<String>,
+}
+
+/// Download the first `~1 MB` of `url` (using HTTP Range if supported) and
+/// report the elapsed time. Used by the UI's "test mirror speed" button
+/// to help the user pick the fastest source for a multi-GB model file.
+///
+/// We use Range: bytes=0-1048575 (1 MiB). If the server doesn't honor
+/// Range, we fall back to aborting after 2 s and reporting what we got.
+pub async fn speed_test_url(url: &str, label: &str) -> SpeedTestResult {
+    const LIMIT_BYTES: u64 = 1_048_576; // 1 MiB
+    const MAX_MS: u64 = 8_000;
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(MAX_MS + 2_000))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return SpeedTestResult {
+                url: url.to_string(),
+                label: label.to_string(),
+                reachable: false,
+                bytes_downloaded: 0,
+                elapsed_ms: 0,
+                speed_bps: 0,
+                error: Some(format!("client: {e}")),
+            }
+        }
+    };
+    let started = std::time::Instant::now();
+    let resp = client
+        .get(url)
+        .header("User-Agent", "admin-suite/0.6")
+        .header("Range", format!("bytes=0-{}", LIMIT_BYTES - 1))
+        .send()
+        .await;
+    let mut result = SpeedTestResult {
+        url: url.to_string(),
+        label: label.to_string(),
+        reachable: false,
+        bytes_downloaded: 0,
+        elapsed_ms: 0,
+        speed_bps: 0,
+        error: None,
+    };
+    match resp {
+        Ok(r) => {
+            if !r.status().is_success() {
+                result.error = Some(format!("HTTP {}", r.status()));
+                return result;
+            }
+            result.reachable = true;
+            // Read up to LIMIT_BYTES, but bail out after MAX_MS.
+            let mut total: u64 = 0;
+            let mut stream = r.bytes_stream();
+            use futures::StreamExt;
+            'outer: loop {
+                let next = tokio::time::timeout(
+                    std::time::Duration::from_millis(MAX_MS),
+                    stream.next(),
+                )
+                .await;
+                match next {
+                    Ok(Some(Ok(c))) => {
+                        total += c.len() as u64;
+                        if total >= LIMIT_BYTES {
+                            break;
+                        }
+                    }
+                    Ok(Some(Err(e))) => {
+                        result.error = Some(format!("read: {e}"));
+                        break 'outer;
+                    }
+                    Ok(None) => break,   // stream done
+                    Err(_) => break,     // timeout
+                }
+            }
+            let elapsed: u64 = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+            result.bytes_downloaded = total;
+            result.elapsed_ms = elapsed;
+            result.speed_bps = if elapsed > 0 {
+                (total as f64 * 1000.0 / elapsed as f64) as u64
+            } else {
+                0
+            };
+        }
+        Err(e) => {
+            result.error = Some(format!("connect: {e}"));
+        }
+    }
+    result
+}
+
 /// Build the standard mirror list (primary URL comes from HF).
 pub fn build_mirrors(repo: &str, primary_filename: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -420,6 +522,109 @@ pub async fn resolve_repo(
     cache_put(&mut cache, resolved.clone());
     let _ = save_cache(cache_dir, &cache);
     Ok(resolved)
+}
+
+/// Resolve a spec AND probe every mirror for actual download speed, then
+/// promote the fastest reachable mirror to primary. Critical for users
+/// in regions where HuggingFace is rate-limited or firewalled (CN, RU, IR)
+/// — without this, the install picks HF first and gets 50-200 KB/s even
+/// on a gigabit link because the bottleneck is the cross-border hop, not
+/// the local network.
+///
+/// Persists the rerouted resolution to cache so subsequent installs go
+/// straight to the fast mirror.
+pub async fn resolve_spec_with_speedtest(
+    spec: &FallbackModelSpec,
+    cache_dir: &Path,
+) -> Result<ResolvedModel, String> {
+    let mut cache = load_cache(cache_dir);
+    let now = unix_ms();
+    if let Some(cached) = cache_get(&cache, spec.id, now) {
+        // Even if cached, optionally re-probe speeds every TTL/2 to detect
+        // when a mirror gets faster/slower. Cheap, so always do it.
+        let mut r = cached;
+        let probed = probe_and_reroute(spec, &mut r).await;
+        if probed {
+            // Re-persist with refreshed primary.
+            cache_put(&mut cache, r.clone());
+            let _ = save_cache(cache_dir, &cache);
+        }
+        return Ok(r);
+    }
+
+    // Fresh resolve.
+    let hf = fetch_hf_model(spec.hf_repo).await?;
+    let best = pick_best_gguf(&hf.siblings, spec.preferred_file_glob)
+        .ok_or_else(|| format!("no .gguf file found in {}", spec.hf_repo))?;
+    let primary_url = format!(
+        "{}/{}/resolve/main/{}",
+        HF_API_BASE, spec.hf_repo, best.rfilename
+    );
+    let (size, sha) = match head_url_meta(&primary_url).await {
+        Ok((s, h)) => (s, h),
+        Err(_) => (best.size.unwrap_or(spec.size_estimate_bytes), None),
+    };
+    let mut resolved = ResolvedModel {
+        id: spec.id.to_string(),
+        display_name: spec.display_name.to_string(),
+        primary_url,
+        mirrors: build_mirrors(spec.hf_repo, &best.rfilename),
+        size_bytes: size,
+        sha256: sha,
+        resolved_at_unix_ms: now,
+    };
+    let _ = probe_and_reroute(spec, &mut resolved).await;
+    cache_put(&mut cache, resolved.clone());
+    let _ = save_cache(cache_dir, &cache);
+    Ok(resolved)
+}
+
+/// Probe every reachable URL in `resolved` (primary + mirrors) and
+/// rewrite `resolved.primary_url` to the fastest one. Mirrors that fail
+/// the probe are dropped. Returns true if any change was made.
+async fn probe_and_reroute(
+    spec: &FallbackModelSpec,
+    resolved: &mut ResolvedModel,
+) -> bool {
+    let mut all_urls: Vec<String> = vec![resolved.primary_url.clone()];
+    all_urls.extend(resolved.mirrors.iter().cloned());
+    // Filter out duplicates while keeping order.
+    let mut seen = std::collections::HashSet::new();
+    all_urls.retain(|u| seen.insert(u.clone()));
+
+    let mut probes = Vec::with_capacity(all_urls.len());
+    for u in &all_urls {
+        probes.push(speed_test_url(u, "probe").await);
+    }
+    // Pick the fastest reachable. Speed 0 (timeout/empty) is treated as
+    // unreachable — fall through to next.
+    let best = probes
+        .iter()
+        .filter(|r| r.reachable && r.speed_bps > 0)
+        .max_by_key(|r| r.speed_bps);
+    let Some(best) = best else {
+        // None reachable; leave existing resolution alone.
+        return false;
+    };
+    if best.url == resolved.primary_url {
+        // Primary already fastest; nothing to do.
+        return false;
+    }
+    // Demote old primary to mirrors (so we keep it as a fallback), and
+    // promote the winner to primary.
+    let mut new_mirrors: Vec<String> = vec![];
+    for u in &all_urls {
+        if u == &best.url {
+            continue;
+        }
+        if probes.iter().any(|r| &r.url == u && r.reachable) {
+            new_mirrors.push(u.clone());
+        }
+    }
+    resolved.primary_url = best.url.clone();
+    resolved.mirrors = new_mirrors;
+    let _ = spec; // suppress unused warning
+    true
 }
 
 /// Discover top-N trending GGUF-Instruct models from HuggingFace.
