@@ -28,11 +28,14 @@ jobs:
           #   args: --target i686-pc-windows-msvc
 
     env:
-      # Path where Tauri's bundler looks for WiX 3 binaries (verified
-      # against tauri-bundler v1.6's `wix.rs::get_wix_path`). Pre-populating
-      # this with the cache step below sidesteps Tauri's flaky mid-bundle
-      # download from github.com/wixtoolset.
-      WIX_CACHE: ${{ env.LOCALAPPDATA }}\tauri\WiX
+      # Path where Tauri's bundler looks for WiX 3 binaries. Tauri's
+      # bundler (tauri-bundler/src/bundle/windows/wix.rs::get_wix_path)
+      # uses dirs_next::data_local_dir() which on Windows resolves to
+      # %LOCALAPPDATA%. On github-hosted windows-latest runners that's
+      # C:\Users\runneradmin\AppData\Local — we hardcode it here to keep
+      # the YAML free of nested-expression gotchas that have been tripping
+      # the workflow validator.
+      WIX_CACHE: 'C:\Users\runneradmin\AppData\Local\tauri\WiX'
 
     steps:
       - name: Checkout
@@ -79,7 +82,7 @@ jobs:
         if: steps.wix-cache.outputs.cache-hit != 'true'
         shell: pwsh
         env:
-          WIX_CACHE: ${{ env.LOCALAPPDATA }}\tauri\WiX
+          WIX_CACHE: 'C:\Users\runneradmin\AppData\Local\tauri\WiX'
         run: |
           $wixDir = $env:WIX_CACHE
           New-Item -ItemType Directory -Force -Path $wixDir | Out-Null
