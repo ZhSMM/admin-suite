@@ -337,6 +337,10 @@ pub async fn head_url_meta(url: &str) -> Result<(u64, Option<String>), String> {
 pub struct SpeedTestResult {
     pub url: String,
     pub label: String, // "primary" | "hf-mirror" | "modelscope" | "manual"
+    /// "download" = real .gguf URL the user can hand to IDM / a browser
+    /// "probe" = a HEAD-200-only root URL used when we couldn't resolve
+    ///           the real blob (rare; usually means HF API is unreachable)
+    pub kind: String,
     pub reachable: bool,
     pub bytes_downloaded: u64,
     pub elapsed_ms: u64,
@@ -350,7 +354,7 @@ pub struct SpeedTestResult {
 ///
 /// We use Range: bytes=0-1048575 (1 MiB). If the server doesn't honor
 /// Range, we fall back to aborting after 2 s and reporting what we got.
-pub async fn speed_test_url(url: &str, label: &str) -> SpeedTestResult {
+pub async fn speed_test_url(url: &str, label: &str, kind: &str) -> SpeedTestResult {
     const LIMIT_BYTES: u64 = 1_048_576; // 1 MiB
     const MAX_MS: u64 = 8_000;
     let client = match reqwest::Client::builder()
@@ -362,6 +366,7 @@ pub async fn speed_test_url(url: &str, label: &str) -> SpeedTestResult {
             return SpeedTestResult {
                 url: url.to_string(),
                 label: label.to_string(),
+                kind: kind.to_string(),
                 reachable: false,
                 bytes_downloaded: 0,
                 elapsed_ms: 0,
@@ -380,6 +385,7 @@ pub async fn speed_test_url(url: &str, label: &str) -> SpeedTestResult {
     let mut result = SpeedTestResult {
         url: url.to_string(),
         label: label.to_string(),
+        kind: kind.to_string(),
         reachable: false,
         bytes_downloaded: 0,
         elapsed_ms: 0,
@@ -421,11 +427,19 @@ pub async fn speed_test_url(url: &str, label: &str) -> SpeedTestResult {
             let elapsed: u64 = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
             result.bytes_downloaded = total;
             result.elapsed_ms = elapsed;
-            result.speed_bps = if elapsed > 0 {
-                (total as f64 * 1000.0 / elapsed as f64) as u64
-            } else {
-                0
-            };
+            // A reliable speed needs ≥ 16 KB of body. Less than that and
+            // the server probably ignored our Range header and returned
+            // a redirect or error page — treat as unreachable for speed
+            // comparison purposes.
+            if total < 16_384 || elapsed == 0 {
+                result.reachable = false;
+                result.error = Some(format!(
+                    "only {} bytes in {} ms — likely ignored Range",
+                    total, elapsed
+                ));
+                return result;
+            }
+            result.speed_bps = (total as f64 * 1000.0 / elapsed as f64) as u64;
         }
         Err(e) => {
             result.error = Some(format!("connect: {e}"));
@@ -579,6 +593,39 @@ pub async fn resolve_spec_with_speedtest(
     Ok(resolved)
 }
 
+/// Like `resolve_spec_with_speedtest` but forces `primary_url` to
+/// `preferred_url` (user-picked mirror via the speed-test UI). The
+/// preferred URL is still validated via HEAD; if it fails validation,
+/// resolution falls back to the auto-rerouted result.
+pub async fn resolve_spec_with_preferred(
+    spec: &FallbackModelSpec,
+    cache_dir: &Path,
+    preferred_url: &str,
+) -> Result<ResolvedModel, String> {
+    let now = unix_ms();
+    let hf = fetch_hf_model(spec.hf_repo).await?;
+    let best = pick_best_gguf(&hf.siblings, spec.preferred_file_glob)
+        .ok_or_else(|| format!("no .gguf file found in {}", spec.hf_repo))?;
+    let (size, sha) = match head_url_meta(preferred_url).await {
+        Ok((s, h)) => (s, h),
+        Err(_) => (best.size.unwrap_or(spec.size_estimate_bytes), None),
+    };
+    let resolved = ResolvedModel {
+        id: spec.id.to_string(),
+        display_name: spec.display_name.to_string(),
+        primary_url: preferred_url.to_string(),
+        mirrors: build_mirrors(spec.hf_repo, &best.rfilename),
+        size_bytes: size,
+        sha256: sha,
+        resolved_at_unix_ms: now,
+    };
+    // Persist the user's choice so subsequent installs skip probing.
+    let mut cache = load_cache(cache_dir);
+    cache_put(&mut cache, resolved.clone());
+    let _ = save_cache(cache_dir, &cache);
+    Ok(resolved)
+}
+
 /// Probe every reachable URL in `resolved` (primary + mirrors) and
 /// rewrite `resolved.primary_url` to the fastest one. Mirrors that fail
 /// the probe are dropped. Returns true if any change was made.
@@ -594,7 +641,7 @@ async fn probe_and_reroute(
 
     let mut probes = Vec::with_capacity(all_urls.len());
     for u in &all_urls {
-        probes.push(speed_test_url(u, "probe").await);
+        probes.push(speed_test_url(u, "probe", "download").await);
     }
     // Pick the fastest reachable. Speed 0 (timeout/empty) is treated as
     // unreachable — fall through to next.

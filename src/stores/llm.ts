@@ -192,14 +192,14 @@ export const useLlmStore = defineStore('llm', {
         this.error = e instanceof Error ? e.message : String(e)
       }
     },
-    async installModel(token: string, modelId: string) {
+    async installModel(token: string, modelId: string, preferredUrl?: string) {
       this.installInFlight = true
       this.installProgress = null
       this.installCurrentStage = null
       this.installError = null
       await this.subscribeInstallEvents(modelId, token)
       try {
-        await llmApi.fallbackInstallStart(token, modelId)
+        await llmApi.fallbackInstallStart(token, modelId, preferredUrl)
       } catch (e) {
         this.installInFlight = false
         this.installError = e instanceof Error ? e.message : String(e)
@@ -263,7 +263,7 @@ export const useLlmStore = defineStore('llm', {
     },
     async speedTest(token: string, modelId: string, manualUrl?: string): Promise<SpeedTestResult[]> {
       try {
-        return await llmApi.fallbackSpeedTest(token, modelId, manualUrl)
+        return await llmApi.fallbackSpeedTest(token, { modelId, manualUrl })
       } catch (e) {
         this.installError = e instanceof Error ? e.message : String(e)
         return []

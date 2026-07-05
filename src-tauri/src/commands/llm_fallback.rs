@@ -17,7 +17,7 @@
 //! `llm_fallback_status` command (no change). Frontend re-fetches it
 //! whenever `llm:fallback:progress` fires.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -53,15 +53,23 @@ pub struct InstallStartResult {
     pub model_size_bytes: u64,
     pub server_size_bytes: u64,
     pub already_installed: bool,
+    /// If non-null, the install will use this URL as primary (the user
+    /// picked a specific mirror via the speed-test UI).
+    pub preferred_url: Option<String>,
 }
 
 /// Tauri command: kick off the two-stage download in a background task.
+///
+/// If `preferred_url` is set, the resolver uses it as primary (skipping
+/// the auto-reroute via speed-test). Otherwise it runs the standard
+/// `resolve_spec_with_speedtest` flow.
 #[tauri::command]
 pub async fn llm_fallback_install_start(
     state: tauri::State<'_, AppState>,
     app: AppHandle,
     token: String,
     model_id: String,
+    preferred_url: Option<String>,
 ) -> Result<InstallStartResult, AppError> {
     let _t = m::time(&state.metrics, "llm_fallback_install_start");
     let _user = llm_cmd::require_perm(&state, &token, "llm:manage")?;
@@ -84,6 +92,7 @@ pub async fn llm_fallback_install_start(
             model_size_bytes: model_size,
             server_size_bytes: server_size,
             already_installed: true,
+            preferred_url,
         });
     }
 
@@ -94,6 +103,7 @@ pub async fn llm_fallback_install_start(
     let cache_dir_for_task = state.fallback.llm_dir();
     // Spawn the actual download work on a separate task so the Tauri
     // command returns immediately and the UI can subscribe to events.
+    let preferred_url_for_task = preferred_url.clone();
     tokio::spawn(async move {
         run_install(
             app_clone,
@@ -101,6 +111,7 @@ pub async fn llm_fallback_install_start(
             cache_dir_for_task,
             model_id_for_event,
             model_id_owned,
+            preferred_url_for_task,
         )
         .await;
     });
@@ -112,7 +123,27 @@ pub async fn llm_fallback_install_start(
         model_size_bytes: model_spec.size_estimate_bytes,
         server_size_bytes: 35_000_000,
         already_installed: false,
+        preferred_url,
     })
+}
+
+/// Resolve the spec — using the user-picked URL if provided, otherwise
+/// running the auto-reroute speedtest. User-picked URLs that fail HEAD
+/// validation fall through to the auto-rerouted result.
+async fn resolve_model(
+    spec: &fallback::FallbackModelSpec,
+    cache_dir: &Path,
+    preferred_url: Option<&str>,
+) -> Result<fallback::ResolvedModel, String> {
+    if let Some(url) = preferred_url {
+        match fallback::resolve_spec_with_preferred(spec, cache_dir, url).await {
+            Ok(r) => return Ok(r),
+            Err(_) => {
+                // user URL failed validation; fall through to speedtest
+            }
+        }
+    }
+    fallback::resolve_spec_with_speedtest(spec, cache_dir).await
 }
 
 async fn run_install(
@@ -121,6 +152,7 @@ async fn run_install(
     cache_dir: PathBuf,
     model_id: String,
     model_id_for_log: String,
+    preferred_url: Option<String>,
 ) {
     // Stage 1: ensure llama-server.exe (download + extract).
     let server_path = mgr.llama_server_binary_path();
@@ -157,12 +189,8 @@ async fn run_install(
     // every mirror's actual download speed and promote the fastest to
     // primary. For users in CN / regions where HF is throttled, this
     // reroutes the install to a fast mirror without any user action.
-    let resolved = match fallback::resolve_spec_with_speedtest(
-        fallback::find_spec(&model_id).expect("checked in install_start"),
-        &cache_dir,
-    )
-    .await
-    {
+    let spec_for_resolve = fallback::find_spec(&model_id).expect("checked in install_start");
+    let resolved = match resolve_model(spec_for_resolve, &cache_dir, preferred_url.as_deref()).await {
         Ok(r) => r,
         Err(e) => {
             let _ = mgr.update_phase(Phase::Error {
@@ -402,48 +430,71 @@ pub async fn llm_fallback_discover_trending(
 }
 
 /// Speed-test every mirror for the given model_id (or for a single URL
-/// if `manual_url` is set). Downloads ~1 MiB from each, returns speed
-/// for the UI to rank.
+/// if `manual_url` is set).
+///
+/// Behaviour:
+///   - `model_id`: resolve the spec → real GGUF URLs → test each (kind='download')
+///   - `manual_url`: just test that one URL (kind='download', label='manual')
+///
+/// When `model_id` is provided but resolution fails (HF API unreachable),
+/// returns an empty Vec — the UI should then surface a "paste a URL"
+/// input so the user can supply a known mirror. We DO NOT fallback to
+/// probing root URLs anymore — that produced misleading "URLs" the user
+/// couldn't actually paste into IDM.
 #[tauri::command]
 pub async fn llm_fallback_speed_test(
     state: tauri::State<'_, AppState>,
     _token: String,
-    model_id: String,
+    model_id: Option<String>,
     manual_url: Option<String>,
 ) -> Result<Vec<fallback::SpeedTestResult>, AppError> {
     let _t = m::time(&state.metrics, "llm_fallback_speed_test");
     let _user = llm_cmd::require_perm(&state, &_token, "llm:use")?;
-    let mut urls: Vec<(&str, &str)> = Vec::new();
+
+    // User-provided URL: just probe that one.
     if let Some(u) = manual_url.as_deref() {
-        urls.push((u, "manual"));
-    } else {
-        // Resolve the model spec to get the primary URL + mirrors.
-        let spec = fallback::find_spec(&model_id)
-            .ok_or_else(|| AppError::Validation(format!("unknown model: {model_id}")))?;
-        // Try cache first; if miss, do a best-effort resolve.
-        let cache_dir = state.fallback.llm_dir();
-        let resolved = fallback::resolve_spec(spec, &cache_dir).await.ok();
-        if let Some(r) = resolved {
-            urls.push((Box::leak(r.primary_url.into_boxed_str()), "primary"));
-            for m in &r.mirrors {
-                let s: &str = Box::leak(m.clone().into_boxed_str());
-                let label = if m.contains("hf-mirror") { "hf-mirror" } else if m.contains("modelscope") { "modelscope" } else { "mirror" };
-                urls.push((s, label));
-            }
-        } else {
-            // resolve_spec failed (HF API unreachable). Fall back to
-            // probing the ROOT of each mirror — these URLs are tiny and
-            // always HEAD 200 if the source itself is reachable. This
-            // gives the user a meaningful "which mirror can I reach"
-            // signal even when HF API is blocked.
-            urls.push(("https://huggingface.co/", "primary"));
-            urls.push(("https://hf-mirror.com/", "hf-mirror"));
-            urls.push(("https://www.modelscope.cn/", "modelscope"));
+        if !u.is_empty() {
+            return Ok(vec![fallback::speed_test_url(u, "manual", "download").await]);
         }
     }
+
+    // Need a model_id to discover mirrors.
+    let model_id = match model_id.as_deref() {
+        Some(id) if !id.is_empty() => id,
+        _ => {
+            return Err(AppError::Validation(
+                "either model_id or manual_url required".into(),
+            ))
+        }
+    };
+    let spec = fallback::find_spec(model_id)
+        .ok_or_else(|| AppError::Validation(format!("unknown model: {model_id}")))?;
+    let cache_dir = state.fallback.llm_dir();
+
+    // Resolve spec → real .gguf URLs. If this fails (HF API down) the
+    // user should be told to paste a URL — we don't pretend to know
+    // their mirror configuration.
+    let resolved = fallback::resolve_spec(spec, &cache_dir).await.ok();
+    let Some(r) = resolved else {
+        return Ok(vec![]);
+    };
+
+    let mut urls: Vec<(String, &'static str)> = vec![(r.primary_url, "primary")];
+    for m in &r.mirrors {
+        let label: &'static str = if m.contains("hf-mirror") {
+            "hf-mirror"
+        } else if m.contains("modelscope") {
+            "modelscope"
+        } else {
+            "mirror"
+        };
+        urls.push((m.clone(), label));
+    }
+
     let mut results = Vec::with_capacity(urls.len());
     for (url, label) in urls {
-        results.push(fallback::speed_test_url(url, label).await);
+        let u = Box::leak(url.into_boxed_str());
+        results.push(fallback::speed_test_url(u, label, "download").await);
     }
     Ok(results)
 }

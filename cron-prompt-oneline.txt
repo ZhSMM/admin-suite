@@ -1,0 +1,7 @@
+Run python "C:\Users\19114\.minimax-agent-cn\projects\admin-suite\poll-release.py" v0.6.0.
+
+If exit 0: v0.6.0 published. Delete this cron (`mavis cron delete mavis poll-v0.6.0`) and notify the user with the release URL https://github.com/ZhSMM/admin-suite/releases/tag/v0.6.0 plus the installer filenames printed.
+
+If exit 1: brief status — no spam.
+
+If exit 2 (rate limit): wait next tick.

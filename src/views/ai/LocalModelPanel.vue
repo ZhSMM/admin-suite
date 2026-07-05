@@ -146,6 +146,15 @@
                 ★ {{ row.label }}
               </el-tag>
               <span v-else>{{ row.label }}</span>
+              <el-tag
+                v-if="row.kind === 'probe'"
+                size="small"
+                type="info"
+                effect="plain"
+                style="margin-left: 6px"
+              >
+                HEAD
+              </el-tag>
             </template>
           </el-table-column>
           <el-table-column :label="t('settings.ai.fallback.speedReachable')" width="100">
@@ -158,13 +167,38 @@
               </el-tooltip>
             </template>
           </el-table-column>
-          <el-table-column :label="t('settings.ai.fallback.speedMbps')" width="140">
+          <el-table-column :label="t('settings.ai.fallback.speedMbps')" width="120">
             <template #default="{ row }">
               <span v-if="row.reachable">{{ formatSpeed(row.speedBps) }}</span>
               <span v-else>—</span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('settings.ai.fallback.speedUrl')" prop="url" show-overflow-tooltip />
+          <el-table-column :label="t('settings.ai.fallback.speedUrl')" prop="url" show-overflow-tooltip>
+            <template #default="{ row }">
+              <code class="mirror-url-code">{{ row.url }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="200" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.reachable && row.kind === 'download'"
+                size="small"
+                :icon="DocumentCopy"
+                @click="copyMirrorUrl(row)"
+              >
+                复制直链
+              </el-button>
+              <el-button
+                v-if="row.reachable && row.kind === 'download' && !isInstalling"
+                size="small"
+                type="primary"
+                :icon="Download"
+                @click="useMirrorInstall(row)"
+              >
+                用此下载
+              </el-button>
+            </template>
+          </el-table-column>
         </el-table>
         <div v-if="bestMirror" class="speed-hint">
           <el-alert
@@ -173,6 +207,40 @@
             :closable="false"
             show-icon
           />
+        </div>
+        <div class="speed-manual">
+          <el-alert
+            title="下载慢/失败？手动方案"
+            type="info"
+            :closable="false"
+            show-icon
+          >
+            <template #default>
+              <ol class="speed-manual-list">
+                <li>点「复制直链」，用 <b>IDM / 迅雷 / aria2c</b> 拉到本地任意目录</li>
+                <li>回这里点「<b>选择本地文件</b>」导入 .gguf，自动按 SHA-256 校验后落盘</li>
+                <li>或者粘贴其他源 URL 到下面的输入框，用「<b>从此 URL 安装</b>」直接走本应用下载器</li>
+              </ol>
+              <div class="speed-manual-input">
+                <el-input
+                  v-model="manualInstallUrl"
+                  placeholder="https://... 任意 .gguf 直链（HF / ModelScope / 群晖 / OSS …）"
+                  clearable
+                >
+                  <template #append>
+                    <el-button
+                      :icon="Download"
+                      :loading="manualInstalling"
+                      :disabled="!manualInstallUrl.trim()"
+                      @click="onInstallFromManualUrl"
+                    >
+                      从此 URL 安装
+                    </el-button>
+                  </template>
+                </el-input>
+              </div>
+            </template>
+          </el-alert>
         </div>
       </div>
 
@@ -199,7 +267,8 @@ import {
   Delete,
   CircleClose,
   Connection,
-  FolderOpened
+  FolderOpened,
+  DocumentCopy
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -356,6 +425,52 @@ async function runSpeedTest() {
     speedResults.value = await llm.speedTest(auth.token || '', selectedModelId.value)
   } finally {
     speedTesting.value = false
+  }
+}
+
+const manualInstallUrl = ref('')
+const manualInstalling = ref(false)
+
+async function copyMirrorUrl(row: import('@/api/llm').SpeedTestResult) {
+  try {
+    await navigator.clipboard.writeText(row.url)
+    ElMessage.success(`已复制 ${row.label} 直链`)
+  } catch (e) {
+    ElMessage.error('复制失败：' + (e instanceof Error ? e.message : String(e)))
+  }
+}
+
+async function useMirrorInstall(row: import('@/api/llm').SpeedTestResult) {
+  if (!selectedModelId.value) return
+  if (!llm.disclaimerAccepted) {
+    disclaimerOpen.value = true
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将使用 ${row.label}（${formatSpeed(row.speedBps)}）开始安装，确定？`,
+      '确认使用此 Mirror',
+      { type: 'info', confirmButtonText: '开始安装', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  speedResults.value = []
+  await llm.installModel(auth.token || '', selectedModelId.value, row.url)
+}
+
+async function onInstallFromManualUrl() {
+  const url = manualInstallUrl.value.trim()
+  if (!url || !selectedModelId.value) return
+  if (!llm.disclaimerAccepted) {
+    disclaimerOpen.value = true
+    return
+  }
+  manualInstalling.value = true
+  try {
+    await llm.installModel(auth.token || '', selectedModelId.value, url)
+  } finally {
+    manualInstalling.value = false
   }
 }
 

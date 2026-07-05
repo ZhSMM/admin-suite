@@ -218,11 +218,6 @@ export const llmApi = {
     call<boolean>('llm_fallback_startup_prompt_needed', { token }),
 
   // Fallback (v0.6.2 — one-click local install)
-  fallbackInstallStart: (token: string, model_id: string) =>
-    call<{ model_id: string; model_size_bytes: number; server_size_bytes: number; already_installed: boolean }>(
-      'llm_fallback_install_start',
-      { token, modelId: model_id }
-    ),
   fallbackInstallCancel: (token: string) =>
     call<boolean>('llm_fallback_install_cancel', { token }),
   fallbackServerStart: (token: string) =>
@@ -232,10 +227,10 @@ export const llmApi = {
   fallbackRemove: (token: string) =>
     call<void>('llm_fallback_remove', { token }),
   fallbackDiskFree: () => call<number>('llm_fallback_disk_free'),
-  fallbackSpeedTest: (token: string, modelId: string, manualUrl?: string) =>
+  fallbackSpeedTest: (token: string, opts: { modelId?: string; manualUrl?: string }) =>
     call<SpeedTestResult[]>(
       'llm_fallback_speed_test',
-      { token, modelId, manualUrl: manualUrl ?? null }
+      { token, modelId: opts.modelId ?? null, manualUrl: opts.manualUrl ?? null }
     ),
   fallbackImportLocal: (token: string, modelId: string, sourcePath: string, expectedSha256?: string) =>
     call<number>('llm_fallback_import_local', {
@@ -243,12 +238,31 @@ export const llmApi = {
       modelId,
       sourcePath,
       expectedSha256: expectedSha256 ?? null
+    }),
+  fallbackInstallStart: (
+    token: string,
+    modelId: string,
+    preferredUrl?: string
+  ) =>
+    call<{
+      model_id: string
+      model_size_bytes: number
+      server_size_bytes: number
+      already_installed: boolean
+      preferred_url?: string | null
+    }>('llm_fallback_install_start', {
+      token,
+      modelId,
+      preferredUrl: preferredUrl ?? null
     })
 }
 
 export interface SpeedTestResult {
   url: string
   label: string
+  /** "download" = real .gguf URL the user can hand to IDM.
+   *  "probe" = HEAD-200-only root URL (rare fallback). */
+  kind: 'download' | 'probe'
   reachable: boolean
   bytesDownloaded: number
   elapsedMs: number
