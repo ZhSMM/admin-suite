@@ -208,10 +208,23 @@ export const useLlmStore = defineStore('llm', {
       }
     },
     async cancelInstall(token: string) {
+      // Cancel is fire-and-forget on the backend — it just flips a flag.
+      // The download future will exit on its next chunk, but no `done`
+      // event is guaranteed. Clear the UI state immediately so the
+      // panel doesn't get stuck showing "downloading 0%" with a stale
+      // Cancel button.
       try {
         await llmApi.fallbackInstallCancel(token)
       } catch (e) {
         this.installError = e instanceof Error ? e.message : String(e)
+      } finally {
+        this.installInFlight = false
+        this.installProgress = null
+        this.installCurrentStage = null
+        this.unsubscribeInstallEvents()
+        // Refresh the snapshot so the phase / size reflect what
+        // actually got downloaded before cancellation.
+        try { await this.refreshFallback(token) } catch { /* ignore */ }
       }
     },
     async startServer(token: string) {
