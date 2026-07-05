@@ -175,7 +175,7 @@ export const llmApi = {
 
   // Models
   listModels: (token: string, provider_id?: string) =>
-    call<LlmModel[]>('llm_models_list', { token, provider_id: provider_id ?? null }),
+    call<LlmModel[]>('llm_models_list', { token, providerId: provider_id ?? null }),
   getModel: (token: string, id: string) => call<LlmModel>('llm_models_get', { token, id }),
   createModel: (token: string, payload: LlmModelInput) =>
     call<LlmModel>('llm_models_create', { token, payload }),
@@ -206,7 +206,7 @@ export const llmApi = {
   // Fallback (v0.6.0)
   fallbackStatus: () => call<FallbackMirror>('llm_fallback_status'),
   fallbackSelectModel: (token: string, model_id: string) =>
-    call<void>('llm_fallback_select_model', { token, model_id }),
+    call<void>('llm_fallback_select_model', { token, modelId: model_id }),
   fallbackSetEnabled: (token: string, enabled: boolean) =>
     call<void>('llm_fallback_set_enabled', { token, enabled }),
   fallbackDismissStartupPrompt: (token: string) =>
@@ -218,7 +218,7 @@ export const llmApi = {
   fallbackInstallStart: (token: string, model_id: string) =>
     call<{ model_id: string; model_size_bytes: number; server_size_bytes: number; already_installed: boolean }>(
       'llm_fallback_install_start',
-      { token, model_id }
+      { token, modelId: model_id }
     ),
   fallbackInstallCancel: (token: string) =>
     call<boolean>('llm_fallback_install_cancel', { token }),
