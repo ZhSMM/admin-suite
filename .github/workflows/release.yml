@@ -30,7 +30,8 @@ jobs:
     env:
       # Path where Tauri looks for WiX 3 binaries. We pre-populate this with
       # the cache step below so tauri build doesn't try to redownload.
-      WIX_CACHE: ${{ runner.os == 'Windows' && format('{0}\.cargo\wix\wix3141rtm', env.USERPROFILE) || format('{0}/.cargo/wix/wix3141rtm', env.HOME) }}
+      # Hardcoded for windows-latest runners; macOS/Linux aren't supported yet.
+      WIX_CACHE: ~/.cargo/wix/wix3141rtm
 
     steps:
       - name: Checkout
