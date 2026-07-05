@@ -41,6 +41,7 @@ pub struct FallbackProgressEvent {
     pub speed_bps: u64,
     pub eta_seconds: u64,
     pub current_stage: String, // mirrors `stage` for convenience
+    pub model_id: String,
 }
 
 /// Result of `llm_fallback_install_start`. Returns immediately; the actual
@@ -177,6 +178,10 @@ async fn run_install(
 }
 
 fn emit_progress(app: &AppHandle, model_id: &str, stage: &str, p: &DownloadProgress) {
+    // Tauri's event-name validator rejects `.` (and other characters), but
+    // model_id is user-provided and may contain dots (e.g. the Qwen GGUF
+    // id "qwen2.5-1.5b-instruct-q4km"). Emit a SINGLE event with the
+    // model_id in the payload; the frontend filters by that field.
     let payload = FallbackProgressEvent {
         stage: stage.to_string(),
         bytes_done: p.bytes_done,
@@ -184,11 +189,9 @@ fn emit_progress(app: &AppHandle, model_id: &str, stage: &str, p: &DownloadProgr
         speed_bps: p.speed_bps,
         eta_seconds: p.eta_seconds,
         current_stage: stage.to_string(),
+        model_id: model_id.to_string(),
     };
-    let _ = app.emit_all(
-        &format!("llm:fallback:progress:{}", model_id),
-        payload,
-    );
+    let _ = app.emit_all("llm:fallback:progress", payload);
 }
 
 fn emit_done(app: &AppHandle, model_id: &str, success: bool, error: &str) {
@@ -200,7 +203,7 @@ fn emit_done(app: &AppHandle, model_id: &str, success: bool, error: &str) {
         error: String,
     }
     let _ = app.emit_all(
-        &format!("llm:fallback:done:{}", model_id),
+        "llm:fallback:done",
         DonePayload {
             model_id: model_id.to_string(),
             success,

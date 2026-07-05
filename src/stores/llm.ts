@@ -10,6 +10,7 @@ export interface FallbackProgress {
   speedBps: number
   etaSeconds: number
   currentStage: 'model' | 'server'
+  modelId: string
 }
 
 interface State {
@@ -139,22 +140,27 @@ export const useLlmStore = defineStore('llm', {
     acceptDisclaimer() {
       localStorage.setItem('llm.fallback.disclaimer_accepted_v1', 'true')
     },
-    /** Subscribe to `llm:fallback:progress:<model_id>` and
-     * `llm:fallback:done:<model_id>` events for the duration of one install.
+    /** Subscribe to `llm:fallback:progress` and `llm:fallback:done` events
+     * for the duration of one install. Both events carry `model_id` in the
+     * payload; the UI filters by the requested model. (Tauri's event-name
+     * validator rejects `.` so we can't put model_id in the event name.)
      * Cleared automatically on done/error/cancel. */
     async subscribeInstallEvents(modelId: string, token: string) {
       // Tear down any prior listeners first.
       this.unsubscribeInstallEvents()
+      const target = modelId
       const unlistenProgress = await listen<FallbackProgress>(
-        `llm:fallback:progress:${modelId}`,
+        'llm:fallback:progress',
         (e) => {
+          if (e.payload.modelId !== target) return
           this.installProgress = e.payload
           this.installCurrentStage = e.payload.stage
         }
       )
       const unlistenDone = await listen<{ model_id: string; success: boolean; error: string }>(
-        `llm:fallback:done:${modelId}`,
+        'llm:fallback:done',
         async (e) => {
+          if (e.payload.model_id !== target) return
           this.installInFlight = false
           if (!e.payload.success) {
             this.installError = e.payload.error || 'install failed'
