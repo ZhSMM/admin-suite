@@ -689,6 +689,7 @@ export default {
   'settings.ai.fallback.model': '模型',
   'settings.ai.fallback.diskFree': '磁盘剩余',
   'settings.ai.fallback.diskFreeChecking': '检查中…',
+  'settings.ai.fallback.diskInsufficient': '磁盘空间不足',
   'settings.ai.fallback.progress': '进度',
   'settings.ai.fallback.stageServer': '正在下载 server 运行时',
   'settings.ai.fallback.stageModel': '正在下载模型权重',

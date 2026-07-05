@@ -264,6 +264,15 @@ pub async fn llm_fallback_remove(
     Ok(())
 }
 
+/// Returns the free disk space (in bytes) on the volume holding `<data_dir>`.
+/// Used by the Settings → AI panel to warn before kicking off a 1GB+ download.
+#[tauri::command]
+pub fn llm_fallback_disk_free(state: tauri::State<'_, AppState>) -> Result<u64, AppError> {
+    let _t = m::time(&state.metrics, "llm_fallback_disk_free");
+    let dir = state.fallback.data_dir();
+    fs2::available_space(&dir).map_err(|e| AppError::Internal(format!("disk_free: {e}")))
+}
+
 // ---------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------

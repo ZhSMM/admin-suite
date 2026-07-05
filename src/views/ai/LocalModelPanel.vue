@@ -50,7 +50,16 @@
 
       <!-- Not installed / errored -->
       <el-form-item v-if="showInstallButton" :label="t('settings.ai.fallback.diskFree')">
-        <span>{{ diskFreeHuman }}</span>
+        <span v-if="diskFree == null">…</span>
+        <span v-else>{{ diskFreeHuman }}</span>
+        <el-tag
+          v-if="diskFree != null && diskFree < selectedModelSize"
+          type="danger"
+          size="small"
+          style="margin-left: 8px"
+        >
+          {{ t('settings.ai.fallback.diskInsufficient') }}
+        </el-tag>
       </el-form-item>
 
       <!-- Download progress -->
@@ -159,6 +168,13 @@ onMounted(async () => {
       llm.fallbackModels[0]?.id ??
       ''
   }
+  refreshDiskFree()
+})
+
+// Re-check disk free whenever the user picks a different model (the
+// "enough space" hint depends on the selected model's size).
+watch(selectedModelId, () => {
+  if (showInstallButton.value) refreshDiskFree()
 })
 
 watch(
@@ -251,7 +267,16 @@ const progressPct = computed(() => {
   return Math.min(100, Math.round((p.bytesDone / p.totalBytes) * 100))
 })
 
-const diskFreeHuman = computed(() => t('settings.ai.fallback.diskFreeChecking'))
+const diskFree = ref<number | null>(null)
+
+const diskFreeHuman = computed(() => {
+  if (diskFree.value == null) return t('settings.ai.fallback.diskFreeChecking')
+  return formatBytes(diskFree.value)
+})
+
+async function refreshDiskFree() {
+  diskFree.value = await llm.fetchDiskFree()
+}
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`

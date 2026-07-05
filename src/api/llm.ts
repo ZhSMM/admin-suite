@@ -227,5 +227,6 @@ export const llmApi = {
   fallbackServerStop: (token: string) =>
     call<void>('llm_fallback_server_stop', { token }),
   fallbackRemove: (token: string) =>
-    call<void>('llm_fallback_remove', { token })
+    call<void>('llm_fallback_remove', { token }),
+  fallbackDiskFree: () => call<number>('llm_fallback_disk_free')
 }

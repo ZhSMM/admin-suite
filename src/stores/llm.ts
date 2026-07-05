@@ -230,6 +230,13 @@ export const useLlmStore = defineStore('llm', {
         this.installError = e instanceof Error ? e.message : String(e)
         throw e
       }
+    },
+    async fetchDiskFree(): Promise<number | null> {
+      try {
+        return await llmApi.fallbackDiskFree()
+      } catch {
+        return null
+      }
     }
   }
 })

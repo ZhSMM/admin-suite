@@ -669,6 +669,7 @@ export default {
   'settings.ai.fallback.model': 'Model',
   'settings.ai.fallback.diskFree': 'Disk free',
   'settings.ai.fallback.diskFreeChecking': 'checking…',
+  'settings.ai.fallback.diskInsufficient': 'Not enough space',
   'settings.ai.fallback.progress': 'Progress',
   'settings.ai.fallback.stageServer': 'Downloading server runtime',
   'settings.ai.fallback.stageModel': 'Downloading model weights',
