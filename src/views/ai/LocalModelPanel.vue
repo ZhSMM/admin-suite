@@ -137,17 +137,28 @@
         </template>
       </el-form-item>
 
-      <!-- Speed test results -->
+      <!-- Speed test results — v0.7.2 streams one row per mirror as the
+           backend probes it, so each row paints immediately instead of
+           waiting for the whole batch. -->
       <div v-if="speedResults.length > 0" class="speed-results">
-        <el-table :data="speedResults" size="small" border>
-          <el-table-column :label="t('settings.ai.fallback.speedMirror')" prop="label" width="120">
+        <el-table :data="speedResults" size="small" border row-key="index">
+          <el-table-column :label="t('settings.ai.fallback.speedMirror')" prop="label" width="160">
             <template #default="{ row }">
-              <el-tag v-if="row === bestMirror" type="success" size="small">
-                ★ {{ row.label }}
+              <el-tag v-if="row.reachable && row === bestMirror" type="success" size="small">
+                ★ {{ row.label || `Mirror #${(row.index ?? 0) + 1}` }}
               </el-tag>
-              <span v-else>{{ row.label }}</span>
+              <span v-else-if="row.label">{{ row.label }}</span>
+              <span v-else-if="row.probing" class="muted">
+                {{
+                  (row.index ?? 0) === 0 ? t('settings.ai.fallback.speedProbePrimary')
+                  : (row.index ?? 0) === 1 ? t('settings.ai.fallback.speedProbeMirrorA')
+                  : (row.index ?? 0) === 2 ? t('settings.ai.fallback.speedProbeMirrorB')
+                  : `Mirror #${(row.index ?? 0) + 1}`
+                }}
+              </span>
+              <span v-else class="muted">—</span>
               <el-tag
-                v-if="row.kind === 'probe'"
+                v-if="row.kind === 'probe' && !row.probing"
                 size="small"
                 type="info"
                 effect="plain"
@@ -155,11 +166,24 @@
               >
                 HEAD
               </el-tag>
+              <el-tag
+                v-if="row.probing"
+                size="small"
+                type="primary"
+                effect="plain"
+                style="margin-left: 6px"
+              >
+                <el-icon class="is-loading" style="margin-right: 2px"><Loading /></el-icon>
+                {{ t('settings.ai.fallback.speedProbing') }}
+              </el-tag>
             </template>
           </el-table-column>
-          <el-table-column :label="t('settings.ai.fallback.speedReachable')" width="100">
+          <el-table-column :label="t('settings.ai.fallback.speedReachable')" width="120">
             <template #default="{ row }">
-              <el-tag v-if="row.reachable" type="success" size="small">
+              <el-tag v-if="row.probing" type="info" size="small">
+                {{ t('settings.ai.fallback.speedProbingShort') }}
+              </el-tag>
+              <el-tag v-else-if="row.reachable" type="success" size="small">
                 {{ t('settings.ai.fallback.speedOk') }}
               </el-tag>
               <el-tooltip v-else :content="row.error || ''">
@@ -167,21 +191,23 @@
               </el-tooltip>
             </template>
           </el-table-column>
-          <el-table-column :label="t('settings.ai.fallback.speedMbps')" width="120">
+          <el-table-column :label="t('settings.ai.fallback.speedMbps')" width="140">
             <template #default="{ row }">
-              <span v-if="row.reachable">{{ formatSpeed(row.speedBps) }}</span>
+              <span v-if="row.probing" class="muted">…</span>
+              <span v-else-if="row.reachable">{{ formatSpeed(row.speedBps) }}</span>
               <span v-else>—</span>
             </template>
           </el-table-column>
           <el-table-column :label="t('settings.ai.fallback.speedUrl')" prop="url" show-overflow-tooltip>
             <template #default="{ row }">
-              <code class="mirror-url-code">{{ row.url }}</code>
+              <code v-if="row.url" class="mirror-url-code">{{ row.url }}</code>
+              <span v-else class="muted">…</span>
             </template>
           </el-table-column>
           <el-table-column label="操作" width="200" fixed="right">
             <template #default="{ row }">
               <el-button
-                v-if="row.reachable && row.kind === 'download'"
+                v-if="!row.probing && row.reachable && row.kind === 'download'"
                 size="small"
                 :icon="DocumentCopy"
                 @click="copyMirrorUrl(row)"
@@ -189,7 +215,7 @@
                 复制直链
               </el-button>
               <el-button
-                v-if="row.reachable && row.kind === 'download' && !isInstalling"
+                v-if="!row.probing && row.reachable && row.kind === 'download' && !isInstalling"
                 size="small"
                 type="primary"
                 :icon="Download"
@@ -200,14 +226,6 @@
             </template>
           </el-table-column>
         </el-table>
-        <div v-if="bestMirror" class="speed-hint">
-          <el-alert
-            :title="t('settings.ai.fallback.speedHint', { mirror: bestMirror.label, speed: formatSpeed(bestMirror.speedBps) })"
-            type="success"
-            :closable="false"
-            show-icon
-          />
-        </div>
         <div class="speed-manual">
           <el-alert
             title="下载慢/失败？手动方案"
@@ -268,7 +286,8 @@ import {
   CircleClose,
   Connection,
   FolderOpened,
-  DocumentCopy
+  DocumentCopy,
+  Loading
 } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -413,19 +432,16 @@ async function refreshDiskFree() {
   diskFree.value = await llm.fetchDiskFree()
 }
 
-// ---- v0.6.5: speed-test mirrors ----
-const speedResults = ref<import('@/api/llm').SpeedTestResult[]>([])
-const speedTesting = ref(false)
+// ---- v0.6.5/v0.7.2: speed-test mirrors ----
+// v0.7.2 — Results stream from the backend via the
+// `llm:fallback:speed-test` event. The store repopulates `speedTestRows`
+// in real time (one row per URL, painted as soon as it's probed).
+const speedResults = computed(() => llm.speedTestRows)
+const speedTesting = computed(() => llm.speedTestInFlight)
 
 async function runSpeedTest() {
   if (!selectedModelId.value) return
-  speedTesting.value = true
-  speedResults.value = []
-  try {
-    speedResults.value = await llm.speedTest(auth.token || '', selectedModelId.value)
-  } finally {
-    speedTesting.value = false
-  }
+  await llm.speedTest(auth.token || '', selectedModelId.value)
 }
 
 const manualInstallUrl = ref('')
@@ -455,7 +471,6 @@ async function useMirrorInstall(row: import('@/api/llm').SpeedTestResult) {
   } catch {
     return
   }
-  speedResults.value = []
   await llm.installModel(auth.token || '', selectedModelId.value, row.url)
 }
 

@@ -279,4 +279,9 @@ export interface SpeedTestResult {
   elapsedMs: number
   speedBps: number
   error: string | null
+  /** v0.7.2 — true while this row is still being probed (placeholder
+   *  until the backend sends the "result" event for it). */
+  probing?: boolean
+  /** v0.7.2 — 0-based position of this row in the backend's queue. */
+  index?: number
 }

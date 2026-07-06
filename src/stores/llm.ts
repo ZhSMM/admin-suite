@@ -41,6 +41,15 @@ interface State {
   installCurrentStage: 'server' | 'model' | null
   installError: string | null
   fallbackEventUnlisteners: UnlistenFn[]
+  // ---- v0.7.2 streaming speed-test ----
+  /** Live speed-test panel. Rows are either a placeholder (currently probing)
+   *  or a fully populated result. The UI shows a "正在测试..." tag on rows
+   *  that are still probing. */
+  speedTestRows: import('@/api/llm').SpeedTestResult[]
+  /** Number of rows the backend signalled it would probe. */
+  speedTestTotal: number
+  /** True between the first "started" event and the "done" event. */
+  speedTestInFlight: boolean
 }
 
 export const useLlmStore = defineStore('llm', {
@@ -61,7 +70,10 @@ export const useLlmStore = defineStore('llm', {
     installProgress: null,
     installCurrentStage: null,
     installError: null,
-    fallbackEventUnlisteners: []
+    fallbackEventUnlisteners: [],
+    speedTestRows: [],
+    speedTestTotal: 0,
+    speedTestInFlight: false
   }),
   getters: {
     enabledProviders: (s) => s.providers.filter((p) => p.enabled),
@@ -262,12 +274,74 @@ export const useLlmStore = defineStore('llm', {
         return null
       }
     },
-    async speedTest(token: string, modelId: string, manualUrl?: string): Promise<SpeedTestResult[]> {
+    /**
+     * v0.7.2 — Speed-test now streams per-URL through the
+     * `llm:fallback:speed-test` event channel. The first paint shows N
+     * "probing…" rows immediately; each row updates in-place as its
+     * result arrives, so the user sees what's being tested right now
+     * instead of one spinner until everything finishes.
+     */
+    async speedTest(token: string, modelId: string, manualUrl?: string): Promise<void> {
+      const { listen } = await import('@tauri-apps/api/event')
+      const unlistener = await listen<{
+        kind: string
+        modelId: string
+        index: number
+        total: number
+        result?: import('@/api/llm').SpeedTestResult
+        error?: string
+      }>('llm:fallback:speed-test', (e) => {
+        const p = e.payload
+        if (p.kind === 'started') {
+          const rows: import('@/api/llm').SpeedTestResult[] = []
+          for (let i = 0; i < p.total; i++) {
+            rows.push({
+              url: '',
+              label: '',
+              kind: 'download',
+              reachable: false,
+              bytesDownloaded: 0,
+              elapsedMs: 0,
+              speedBps: 0,
+              error: null,
+              probing: true,
+              index: i
+            })
+          }
+          this.speedTestRows = rows
+          this.speedTestTotal = p.total
+          this.speedTestInFlight = true
+          return
+        }
+        if (p.kind === 'result' && p.result) {
+          const idx = p.index
+          const next = [...this.speedTestRows]
+          while (next.length <= idx) next.push({} as any)
+          next[idx] = {
+            ...p.result,
+            probing: false,
+            index: idx
+          }
+          this.speedTestRows = next
+          return
+        }
+        if (p.kind === 'done') {
+          this.speedTestInFlight = false
+          // Strip probing flags so the table settles.
+          this.speedTestRows = this.speedTestRows.map((r: any) => ({ ...r, probing: false }))
+          return
+        }
+      })
       try {
-        return await llmApi.fallbackSpeedTest(token, { modelId, manualUrl })
+        this.speedTestRows = []
+        this.speedTestTotal = 0
+        this.speedTestInFlight = true
+        await llmApi.fallbackSpeedTest(token, { modelId, manualUrl })
       } catch (e) {
         this.installError = e instanceof Error ? e.message : String(e)
-        return []
+        this.speedTestInFlight = false
+      } finally {
+        unlistener()
       }
     },
     /** v0.7.1 — fetch provider catalog (OpenAI/Anthropic/Google). */

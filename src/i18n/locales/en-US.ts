@@ -703,6 +703,12 @@ export default {
   'settings.ai.fallback.speedMbps': 'Speed',
   'settings.ai.fallback.speedUrl': 'URL',
   'settings.ai.fallback.speedHint': 'Fastest mirror: {mirror} ({speed}). Install will use this.',
+  // v0.7.2 — live speed-test status
+  'settings.ai.fallback.speedProbing': 'Probing…',
+  'settings.ai.fallback.speedProbingShort': 'Probing',
+  'settings.ai.fallback.speedProbePrimary': 'Primary',
+  'settings.ai.fallback.speedProbeMirrorA': 'Mirror 1',
+  'settings.ai.fallback.speedProbeMirrorB': 'Mirror 2',
   'settings.ai.fallback.importLocal': 'Import local file…',
   'settings.ai.fallback.importSuccess': 'Model imported successfully.',
 

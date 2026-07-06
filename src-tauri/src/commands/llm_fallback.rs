@@ -441,82 +441,175 @@ pub async fn llm_fallback_discover_trending(
 /// input so the user can supply a known mirror. We DO NOT fallback to
 /// probing root URLs anymore — that produced misleading "URLs" the user
 /// couldn't actually paste into IDM.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SpeedTestEvent {
+    /// "started" — running, no data yet (just a placeholder).
+    /// "result"  — one URL has been probed; payload carries the full record.
+    /// "done"    — no more results will arrive; error carries a message
+    /// if the run aborted.
+    kind: String,
+    model_id: String,
+    /// 0-based index of this URL in the queue (for stable ordering).
+    index: usize,
+    /// Total URLs queued for this round.
+    total: usize,
+    /// When kind == "result", this carries the spec.
+    result: Option<fallback::SpeedTestResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+fn emit_speed_test_event(app: &AppHandle, payload: SpeedTestEvent) {
+    let _ = app.emit_all("llm:fallback:speed-test", payload);
+}
+
 #[tauri::command]
 pub async fn llm_fallback_speed_test(
     state: tauri::State<'_, AppState>,
-    _token: String,
+    app: AppHandle,
+    token: String,
     model_id: Option<String>,
     manual_url: Option<String>,
-) -> Result<Vec<fallback::SpeedTestResult>, AppError> {
+) -> Result<(), AppError> {
     let _t = m::time(&state.metrics, "llm_fallback_speed_test");
-    let _user = llm_cmd::require_perm(&state, &_token, "llm:use")?;
+    let _user = llm_cmd::require_perm(&state, &token, "llm:use")?;
 
-    // User-provided URL: just probe that one.
+    // User-provided URL — single probe. Still streams via the event
+    // channel so the UI has one code path.
     if let Some(u) = manual_url.as_deref() {
         if !u.is_empty() {
-            return Ok(vec![fallback::speed_test_url(u, "manual", "download").await]);
+            let m_id = model_id.clone().unwrap_or_else(|| "manual".into());
+            let u_owned = u.to_string();
+            let app_c = app.clone();
+            tokio::spawn(async move {
+                emit_speed_test_event(
+                    &app_c,
+                    SpeedTestEvent {
+                        kind: "started".into(),
+                        model_id: m_id.clone(),
+                        index: 0,
+                        total: 1,
+                        result: None,
+                        error: None,
+                    },
+                );
+                let r = fallback::speed_test_url(&u_owned, "manual", "download").await;
+                emit_speed_test_event(
+                    &app_c,
+                    SpeedTestEvent {
+                        kind: "result".into(),
+                        model_id: m_id.clone(),
+                        index: 0,
+                        total: 1,
+                        result: Some(r),
+                        error: None,
+                    },
+                );
+                emit_speed_test_event(
+                    &app_c,
+                    SpeedTestEvent {
+                        kind: "done".into(),
+                        model_id: m_id,
+                        index: 0,
+                        total: 1,
+                        result: None,
+                        error: None,
+                    },
+                );
+            });
+            return Ok(());
         }
     }
 
-    // Need a model_id to discover mirrors.
     let model_id = match model_id.as_deref() {
-        Some(id) if !id.is_empty() => id,
+        Some(id) if !id.is_empty() => id.to_string(),
         _ => {
             return Err(AppError::Validation(
                 "either model_id or manual_url required".into(),
             ))
         }
     };
-    let spec = fallback::find_spec(model_id)
-        .ok_or_else(|| AppError::Validation(format!("unknown model: {model_id}")))?;
+    let spec = fallback::find_spec(&model_id)
+        .ok_or_else(|| AppError::Validation(format!("unknown fallback model: {model_id}")))?;
     let cache_dir = state.fallback.llm_dir();
 
     // Resolve spec → real .gguf URLs. If this fails (HF API unreachable
-    // from CN, for example) we don't just hand the user an empty list:
-    // probe the candidate mirrors of `spec.hf_repo` directly, using the
-    // `preferred_file_glob` to derive a filename. The user still sees
-    // useful diagnostics — which mirror responds, how fast, etc.
+    // from CN), probe the candidate mirrors directly using a guessed
+    // filename so the user still gets useful diagnostics.
     let resolved = fallback::resolve_spec(spec, &cache_dir).await.ok();
-    let Some(r) = resolved else {
-        return Ok(probe_known_mirrors_for_spec(spec, &state).await);
+    let urls: Vec<(String, String, &'static str)> = if let Some(r) = resolved {
+        let mut v: Vec<(String, String, &'static str)> =
+            vec![(r.primary_url, "primary".to_string(), "download")];
+        for m in &r.mirrors {
+            let label = if m.contains("hf-mirror") {
+                "hf-mirror"
+            } else if m.contains("modelscope") {
+                "modelscope"
+            } else {
+                "mirror"
+            };
+            v.push((m.clone(), label.to_string(), "download"));
+        }
+        v
+    } else {
+        probe_known_mirrors_for_spec(spec)
+            .into_iter()
+            .map(|(u, l)| (u, l, "probe"))
+            .collect()
     };
 
-    let mut urls: Vec<(String, &'static str)> = vec![(r.primary_url, "primary")];
-    for m in &r.mirrors {
-        let label: &'static str = if m.contains("hf-mirror") {
-            "hf-mirror"
-        } else if m.contains("modelscope") {
-            "modelscope"
-        } else {
-            "mirror"
-        };
-        urls.push((m.clone(), label));
-    }
+    let total = urls.len();
+    let app_clone = app.clone();
+    let mid = model_id.clone();
+    tokio::spawn(async move {
+        emit_speed_test_event(
+            &app_clone,
+            SpeedTestEvent {
+                kind: "started".into(),
+                model_id: mid.clone(),
+                index: 0,
+                total,
+                result: None,
+                error: None,
+            },
+        );
+        for (i, (url, label, kind)) in urls.into_iter().enumerate() {
+            let r = fallback::speed_test_url(&url, &label, kind).await;
+            emit_speed_test_event(
+                &app_clone,
+                SpeedTestEvent {
+                    kind: "result".into(),
+                    model_id: mid.clone(),
+                    index: i,
+                    total,
+                    result: Some(r),
+                    error: None,
+                },
+            );
+        }
+        emit_speed_test_event(
+            &app_clone,
+            SpeedTestEvent {
+                kind: "done".into(),
+                model_id: mid,
+                index: total,
+                total,
+                result: None,
+                error: None,
+            },
+        );
+    });
 
-    let mut results = Vec::with_capacity(urls.len());
-    for (url, label) in urls {
-        let u = Box::leak(url.into_boxed_str());
-        results.push(fallback::speed_test_url(u, label, "download").await);
-    }
-    Ok(results)
+    Ok(())
 }
 
-/// Best-effort probe of the standard mirrors for a fallback spec when
-/// `resolve_spec()` fails (HF API unreachable from this region).
-///
-/// Instead of returning an empty list — which the user reported as "no
-/// data" — we synthesise a list of plausible URLs using known mirror
-/// bases + the filename pattern from the spec, then probe each so the
-/// user gets diagnostic feedback.
-async fn probe_known_mirrors_for_spec(
+/// Build a list of candidate (url, label) pairs using well-known mirror
+/// bases + a filename guessed from the spec. Returned as plain data so
+/// the caller can spawn a background task to probe them.
+fn probe_known_mirrors_for_spec(
     spec: &fallback::FallbackModelSpec,
-    _state: &tauri::State<'_, AppState>,
-) -> Vec<fallback::SpeedTestResult> {
-    let mut urls: Vec<(String, String)> = Vec::new();
-    let repo = spec.hf_repo.to_string();
-    // Cheap guess: use `spec.quantization` (e.g. "Q4_K_M") for the
-    // filename; if the model was published with a different pattern we
-    // fall back to a generic probe URL.
+) -> Vec<(String, String)> {
     let quant = spec.quantization;
     let guess_filename = format!("{}-{}.gguf", spec.id, quant);
     let bases: &[(&str, &str)] = &[
@@ -524,14 +617,10 @@ async fn probe_known_mirrors_for_spec(
         ("hf-mirror", "https://hf-mirror.com"),
         ("modelscope", "https://www.modelscope.cn"),
     ];
+    let mut out = Vec::with_capacity(bases.len());
     for (label, base) in bases {
-        let url = format!("{}/{}/resolve/main/{}", base, repo, guess_filename);
-        urls.push((url, (*label).to_string()));
-    }
-    let mut out = Vec::with_capacity(urls.len());
-    for (url, label) in urls {
-        let probe = fallback::speed_test_url(&url, &label, "probe").await;
-        out.push(probe);
+        let url = format!("{}/{}/resolve/main/{}", base, spec.hf_repo, guess_filename);
+        out.push((url, (*label).to_string()));
     }
     out
 }

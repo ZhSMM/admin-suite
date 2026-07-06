@@ -723,6 +723,12 @@ export default {
   'settings.ai.fallback.speedMbps': '速度',
   'settings.ai.fallback.speedUrl': 'URL',
   'settings.ai.fallback.speedHint': '最快镜像:{mirror} ({speed})。安装将使用此镜像。',
+  // v0.7.2 — live speed-test status (mirrors probed one by one)
+  'settings.ai.fallback.speedProbing': '正在测试…',
+  'settings.ai.fallback.speedProbingShort': '测试中',
+  'settings.ai.fallback.speedProbePrimary': '主镜像',
+  'settings.ai.fallback.speedProbeMirrorA': '镜像 1',
+  'settings.ai.fallback.speedProbeMirrorB': '镜像 2',
   'settings.ai.fallback.importLocal': '导入本地文件…',
   'settings.ai.fallback.importSuccess': '模型导入成功。',
 
