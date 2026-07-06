@@ -18,44 +18,26 @@
       <el-button type="primary" :icon="Plus" style="margin-left: 12px" @click="openCreate">
         {{ t('llm.models.add') }}
       </el-button>
+      <el-button
+        :icon="Download"
+        style="margin-left: 8px"
+        :loading="fetching"
+        @click="onFetchModels"
+      >
+        {{ t('llm.models.fetch') }}
+      </el-button>
     </div>
 
+    <el-alert
+      v-if="!supportsAnyFetch"
+      type="info"
+      :closable="false"
+      style="margin: 12px 0"
+    >
+      {{ t('llm.models.fetchHint') }}
+    </el-alert>
+
     <el-table :data="filteredModels" stripe size="small" empty-text="-">
-      <el-table-column prop="code" label="Code" width="200">
-        <template #default="{ row }"><code>{{ row.code }}</code></template>
-      </el-table-column>
-      <el-table-column prop="display_name" :label="t('llm.models.col.name')" min-width="180" />
-      <el-table-column :label="t('llm.models.col.provider')" width="180">
-        <template #default="{ row }">
-          <span>{{ providerName(row.provider_id) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column :label="t('llm.models.col.context')" width="100" align="right">
-        <template #default="{ row }">{{ row.context_window }}</template>
-      </el-table-column>
-      <el-table-column :label="t('llm.models.col.maxOutput')" width="100" align="right">
-        <template #default="{ row }">{{ row.max_output }}</template>
-      </el-table-column>
-      <el-table-column :label="t('llm.models.col.caps')" min-width="160">
-        <template #default="{ row }">
-          <el-tag v-for="c in caps(row.capabilities)" :key="c" size="small" style="margin-right: 4px">
-            {{ c }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column :label="t('llm.models.col.enabled')" width="80">
-        <template #default="{ row }">
-          <el-tag v-if="row.enabled" type="success" size="small">ON</el-tag>
-          <el-tag v-else type="info" size="small">OFF</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column width="160" align="right">
-        <template #default="{ row }">
-          <el-button size="small" text @click="openEdit(row)">{{ t('common.edit') }}</el-button>
-          <el-button size="small" text type="danger" @click="onDelete(row)">{{ t('common.delete') }}</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
 
     <el-dialog
       v-model="dialog.visible"
@@ -100,6 +82,75 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- v0.7.1 — fetch model catalog -->
+    <el-dialog
+      v-model="fetchDialog.visible"
+      :title="t('llm.models.fetchTitle')"
+      width="780"
+      :close-on-click-modal="false"
+    >
+      <div class="fetch-row">
+        <el-select
+          v-model="fetchDialog.providerId"
+          :placeholder="t('llm.models.col.provider')"
+          style="flex: 1"
+          @change="onFetchModels"
+        >
+          <el-option
+            v-for="p in fetchableProviders"
+            :key="p.id"
+            :label="`${p.name} (${p.code})`"
+            :value="p.id"
+          />
+        </el-select>
+        <el-button :icon="Refresh" :loading="fetching" @click="onFetchModels">
+          {{ t('common.refresh') }}
+        </el-button>
+      </div>
+      <el-table
+        ref="fetchTableRef"
+        :data="fetchDialog.candidates"
+        size="small"
+        empty-text="-"
+        @selection-change="onSelectionChange"
+      >
+        <el-table-column type="selection" width="40" />
+        <el-table-column prop="id" label="Code" min-width="220">
+          <template #default="{ row }"><code>{{ row.id }}</code></template>
+        </el-table-column>
+        <el-table-column :label="t('llm.models.col.name')" min-width="180">
+          <template #default="{ row }">{{ row.display_name || row.id }}</template>
+        </el-table-column>
+        <el-table-column :label="t('llm.models.col.context')" width="100" align="right">
+          <template #default="{ row }">{{ row.context_window ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column :label="t('llm.models.col.caps')" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="row.kind" size="small">{{ row.kind }}</el-tag>
+            <span v-else class="muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('llm.models.alreadyExists')" width="120">
+          <template #default="{ row }">
+            <el-tag v-if="existingCodeSet.has(row.id)" size="small" type="info">
+              {{ t('llm.models.exists') }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="fetchDialog.visible = false">{{ t('common.cancel') }}</el-button>
+        <el-button
+          type="primary"
+          :loading="importing"
+          :disabled="fetchDialog.selected.length === 0"
+          @click="onImportSelected"
+        >
+          {{ t('llm.models.importSelected', { n: fetchDialog.selected.length }) }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -107,10 +158,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Download, Plus, Refresh } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { useLlmStore } from '@/stores/llm'
-import { llmApi, type LlmModel } from '@/api/llm'
+import { llmApi, type LlmModel, type RemoteModelInfo } from '@/api/llm'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -235,6 +286,95 @@ const onDelete = async (row: LlmModel) => {
   await llmApi.deleteModel(auth.token || '', row.id)
   await llm.loadAll(auth.token || '')
   ElMessage.success(t('common.deleteSuccess'))
+}
+
+// ---- v0.7.1 — fetch from provider catalog ----
+const FETCHABLE_KINDS = new Set(['openai_compat', 'anthropic', 'google'])
+const fetchableProviders = computed(() =>
+  llm.providers.filter((p) => FETCHABLE_KINDS.has(p.kind))
+)
+const supportsAnyFetch = computed(() => fetchableProviders.value.length > 0)
+
+const fetchDialog = reactive<{
+  visible: boolean
+  providerId: string
+  candidates: RemoteModelInfo[]
+  selected: RemoteModelInfo[]
+}>({
+  visible: false,
+  providerId: '',
+  candidates: [],
+  selected: []
+})
+
+const fetching = ref(false)
+const importing = ref(false)
+
+// Used by the import dialog to highlight rows whose code is already on file.
+const existingCodeSet = computed(() => {
+  const set = new Set<string>()
+  for (const m of llm.models) {
+    if (fetchDialog.providerId && m.provider_id === fetchDialog.providerId) {
+      set.add(m.code)
+    }
+  }
+  return set
+})
+
+const onSelectionChange = (rows: RemoteModelInfo[]) => {
+  fetchDialog.selected = rows
+}
+
+const onFetchModels = async () => {
+  // First click from the page toolbar — open dialog with default selection
+  // (first fetchable provider).
+  if (!fetchDialog.visible) {
+    fetchDialog.visible = true
+    if (!fetchDialog.providerId && fetchableProviders.value.length > 0) {
+      fetchDialog.providerId = fetchableProviders.value[0].id
+    }
+  }
+  if (!fetchDialog.providerId) return
+  fetching.value = true
+  try {
+    const items = await llm.fetchProviderModels(auth.token || '', fetchDialog.providerId)
+    fetchDialog.candidates = items
+    fetchDialog.selected = []
+    if (items.length === 0) {
+      ElMessage.warning(t('llm.models.fetchEmpty'))
+    }
+  } finally {
+    fetching.value = false
+  }
+}
+
+const onImportSelected = async () => {
+  if (fetchDialog.selected.length === 0) return
+  importing.value = true
+  let ok = 0
+  let failed = 0
+  for (const m of fetchDialog.selected) {
+    try {
+      // Skip ones that already match an existing code under the same provider.
+      if (existingCodeSet.value.has(m.id)) continue
+      await llmApi.createModel(auth.token || '', {
+        provider_id: fetchDialog.providerId,
+        code: m.id,
+        display_name: m.display_name || m.id,
+        context_window: m.context_window ?? 4096,
+        max_output: 2048,
+        capabilities: JSON.stringify(['chat', 'stream']),
+        enabled: true
+      })
+      ok += 1
+    } catch (e) {
+      failed += 1
+    }
+  }
+  importing.value = false
+  await llm.loadAll(auth.token || '')
+  fetchDialog.selected = []
+  ElMessage.success(t('llm.models.importDone', { ok, failed }))
 }
 
 onMounted(() => llm.loadAll(auth.token || ''))

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { llmApi, type ChatMessage, type LlmModel, type LlmProvider, type FallbackMirror, type FallbackState, type SpeedTestResult } from '@/api/llm'
+import { ElMessage } from 'element-plus'
+import { llmApi, type ChatMessage, type LlmModel, type LlmProvider, type FallbackMirror, type FallbackState, type SpeedTestResult, type RemoteModelInfo } from '@/api/llm'
 import { settingsApi } from '@/api/settings'
 
 export interface FallbackProgress {
@@ -266,6 +267,15 @@ export const useLlmStore = defineStore('llm', {
         return await llmApi.fallbackSpeedTest(token, { modelId, manualUrl })
       } catch (e) {
         this.installError = e instanceof Error ? e.message : String(e)
+        return []
+      }
+    },
+    /** v0.7.1 — fetch provider catalog (OpenAI/Anthropic/Google). */
+    async fetchProviderModels(token: string, providerId: string): Promise<RemoteModelInfo[]> {
+      try {
+        return await llmApi.listProviderModels(token, providerId)
+      } catch (e) {
+        ElMessage.error(e instanceof Error ? e.message : String(e))
         return []
       }
     },

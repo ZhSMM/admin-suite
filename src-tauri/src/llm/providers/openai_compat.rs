@@ -14,7 +14,7 @@ use serde::Deserialize;
 
 use crate::llm::{
     ChatMessage, ChatRequest, ChatResponse, LlmError, LlmProvider, ProviderContext,
-    StreamChunk,
+    ProviderModelInfo, StreamChunk,
 };
 
 pub struct OpenAiCompat;
@@ -22,6 +22,65 @@ pub struct OpenAiCompat;
 #[async_trait]
 impl LlmProvider for OpenAiCompat {
     fn kind(&self) -> &'static str { "openai_compat" }
+
+    fn supports_list_models(&self) -> bool { true }
+
+    /// Hits `{base}/models` (OpenAI / Ollama / vLLM / LM Studio / DeepSeek /
+    /// Moonshot / OpenRouter / Zhipu / DashScope OpenAI mode / ...).
+    async fn list_models(
+        &self,
+        ctx: &ProviderContext,
+    ) -> Result<Vec<ProviderModelInfo>, LlmError> {
+        let url = format!("{}/models", ctx.base_url.trim_end_matches('/'));
+        let mut req = ctx.http.get(&url);
+        if let Some(hv) = auth_header(ctx) {
+            let header = ctx.auth_header.as_deref().unwrap_or("authorization");
+            req = req.header(header, hv);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| LlmError::Network(e.to_string()))?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(LlmError::Unauthorized);
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(LlmError::BadStatus {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        #[derive(Deserialize)]
+        struct Resp { data: Vec<Entry> }
+        #[derive(Deserialize)]
+        struct Entry {
+            id: String,
+            #[serde(default)]
+            #[serde(rename = "owned_by")]
+            owned_by: Option<String>,
+            #[serde(default)]
+            object: Option<String>,
+        }
+        let parsed: Resp = resp
+            .json()
+            .await
+            .map_err(|e| LlmError::Decode(e.to_string()))?;
+        Ok(parsed
+            .data
+            .into_iter()
+            .map(|e| ProviderModelInfo {
+                id: e.id.clone(),
+                display_name: Some(e.id.clone()),
+                context_window: None,
+                kind: match e.object.as_deref() {
+                    Some("embedding") => Some("embedding".into()),
+                    _ => Some("chat".into()),
+                },
+            })
+            .collect())
+    }
 
     async fn chat(
         &self,

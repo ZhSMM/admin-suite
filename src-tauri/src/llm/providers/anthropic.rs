@@ -11,7 +11,8 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::llm::{
-    ChatRequest, ChatResponse, LlmError, LlmProvider, ProviderContext, StreamChunk,
+    ChatRequest, ChatResponse, LlmError, LlmProvider, ProviderContext, ProviderModelInfo,
+    StreamChunk,
 };
 
 pub struct Anthropic;
@@ -21,6 +22,79 @@ const API_VERSION: &str = "2023-06-01";
 #[async_trait]
 impl LlmProvider for Anthropic {
     fn kind(&self) -> &'static str { "anthropic" }
+
+    fn supports_list_models(&self) -> bool { true }
+
+    /// Hits Anthropic's `{base}/v1/models` with `anthropic-version` header.
+    /// Default page limit (`?limit=100`) is plenty for the niche list.
+    async fn list_models(
+        &self,
+        ctx: &ProviderContext,
+    ) -> Result<Vec<ProviderModelInfo>, LlmError> {
+        let url = format!(
+            "{}/v1/models?limit=100",
+            ctx.base_url.trim_end_matches('/')
+        );
+        // Mirror the same auth convention as `send()` below: x-api-key +
+        // anthropic-version. A bearer header works too but x-api-key is
+        // what Anthropic documents; we keep behaviour consistent.
+        let mut req = ctx
+            .http
+            .get(&url)
+            .header("anthropic-version", API_VERSION);
+        if let Some(k) = ctx.api_key.as_deref() {
+            if !k.is_empty() {
+                // Honour custom header name from provider settings, but
+                // default to x-api-key — bearer-style for Anthropic still
+                // needs the x-api-key header, per their docs.
+                let h = ctx.auth_header.as_deref().unwrap_or("x-api-key");
+                if h.eq_ignore_ascii_case("authorization") {
+                    req = req.header(h, format!("Bearer {k}"));
+                } else {
+                    req = req.header(h, k);
+                }
+            }
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| LlmError::Network(e.to_string()))?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(LlmError::Unauthorized);
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(LlmError::BadStatus {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        #[derive(Deserialize)]
+        struct Resp { data: Vec<Entry> }
+        #[derive(Deserialize)]
+        struct Entry {
+            id: String,
+            #[serde(default)]
+            display_name: Option<String>,
+            #[serde(default)]
+            r#type: Option<String>,
+        }
+        let parsed: Resp = resp
+            .json()
+            .await
+            .map_err(|e| LlmError::Decode(e.to_string()))?;
+        Ok(parsed
+            .data
+            .into_iter()
+            .map(|e| ProviderModelInfo {
+                id: e.id.clone(),
+                display_name: e.display_name.or(Some(e.id.clone())),
+                context_window: None,
+                kind: Some(e.r#type.unwrap_or_else(|| "chat".into())),
+            })
+            .collect())
+    }
 
     async fn chat(
         &self,
@@ -155,6 +229,16 @@ fn build_body(req: &ChatRequest, stream: bool) -> serde_json::Value {
         if !s.is_empty() { body["stop_sequences"] = json!(s); }
     }
     body
+}
+
+fn auth_header(ctx: &ProviderContext) -> Option<String> {
+    match ctx.auth_type.as_str() {
+        "none" => None,
+        "bearer" => ctx.api_key.as_ref().map(|k| format!("Bearer {k}")),
+        // anthropic uses 'x-api-key' — auth_header is the raw key
+        "header" => ctx.api_key.clone(),
+        _ => ctx.api_key.clone(),
+    }
 }
 
 async fn send(

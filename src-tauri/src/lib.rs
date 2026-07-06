@@ -786,6 +786,8 @@ pub fn run() {
             chat_history_cmd::chat_message_update,
             chat_history_cmd::chat_message_delete,
             chat_history_cmd::chat_session_export,
+            // v0.7.1 — provider model discovery
+            llm_cmd::llm_provider_list_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

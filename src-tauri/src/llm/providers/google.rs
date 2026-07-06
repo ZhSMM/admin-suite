@@ -21,7 +21,8 @@ use futures::StreamExt;
 use serde::Deserialize;
 
 use crate::llm::{
-    ChatRequest, ChatResponse, LlmError, LlmProvider, ProviderContext, StreamChunk,
+    ChatRequest, ChatResponse, LlmError, LlmProvider, ProviderContext, ProviderModelInfo,
+    StreamChunk,
 };
 
 pub struct Google;
@@ -29,6 +30,83 @@ pub struct Google;
 #[async_trait]
 impl LlmProvider for Google {
     fn kind(&self) -> &'static str { "google" }
+
+    fn supports_list_models(&self) -> bool { true }
+
+    /// Hits `{base}/v1beta/models?pageSize=100`. Auth via `x-goog-api-key`
+    /// header (same convention used elsewhere in this adapter).
+    async fn list_models(
+        &self,
+        ctx: &ProviderContext,
+    ) -> Result<Vec<ProviderModelInfo>, LlmError> {
+        let url = format!(
+            "{}/v1beta/models?pageSize=100",
+            ctx.base_url.trim_end_matches('/')
+        );
+        let mut req = ctx.http.get(&url);
+        if let Some(k) = ctx.api_key.as_deref() {
+            if !k.is_empty() {
+                let h = ctx.auth_header.as_deref().unwrap_or("x-goog-api-key");
+                req = req.header(h, k);
+            }
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| LlmError::Network(e.to_string()))?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+            return Err(LlmError::Unauthorized);
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(LlmError::BadStatus {
+                status: status.as_u16(),
+                body,
+            });
+        }
+        #[derive(Deserialize)]
+        struct Resp { models: Option<Vec<Entry>> }
+        #[derive(Deserialize)]
+        struct Entry {
+            name: String,           // "models/gemini-1.5-flash"
+            #[serde(default)]
+            display_name: Option<String>,
+            #[serde(default)]
+            input_token_limit: Option<u32>,
+            #[serde(default)]
+            supported_generation_methods: Option<Vec<String>>,
+        }
+        let parsed: Resp = resp
+            .json()
+            .await
+            .map_err(|e| LlmError::Decode(e.to_string()))?;
+        let mut out = Vec::new();
+        for e in parsed.models.unwrap_or_default() {
+            // Strip the "models/" prefix; store only the id.
+            let id = e
+                .name
+                .strip_prefix("models/")
+                .unwrap_or(&e.name)
+                .to_string();
+            // Heuristic: hide embedding-only models.
+            let chat_capable = e
+                .supported_generation_methods
+                .as_deref()
+                .map(|m| m.iter().any(|x| x == "generateContent"))
+                .unwrap_or(true);
+            if !chat_capable {
+                continue;
+            }
+            out.push(ProviderModelInfo {
+                id,
+                display_name: e.display_name.or(Some(e.name.clone())),
+                context_window: e.input_token_limit,
+                kind: Some("chat".into()),
+            });
+        }
+        Ok(out)
+    }
 
     async fn chat(
         &self,

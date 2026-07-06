@@ -240,7 +240,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
@@ -526,6 +526,23 @@ onMounted(async () => {
   if (!providerId.value && llm.enabledProviders.length > 0) {
     providerId.value = llm.enabledProviders[0].id
     onProviderChange()
+  }
+  await chat.fetchSessions()
+})
+
+// v0.7.1 — re-pull providers+models every time the user re-enters the page.
+// Without this, configuring a new provider/model in /system/llm/models
+// then navigating back would leave the dropdowns showing stale empty rows.
+onActivated(async () => {
+  await llm.loadAll(auth.token || '')
+  // If the previously selected provider disappeared, fall back to the
+  // first available one and refresh the model default.
+  if (providerId.value && !llm.enabledProviders.find((p) => p.id === providerId.value)) {
+    providerId.value = llm.enabledProviders[0]?.id ?? ''
+    modelId.value = ''
+  }
+  if (providerId.value && !modelId.value && modelsForProvider.value.length > 0) {
+    modelId.value = modelsForProvider.value[0].id
   }
   await chat.fetchSessions()
 })

@@ -53,11 +53,19 @@ export interface LlmModel {
   capabilities: string
   context_window: number
   max_output: number
-  pricing_json: string
+  pricing_json: string | null
   enabled: boolean
   sort_order: number
   created_at: string
   updated_at: string
+}
+
+/** v0.7.1 — one entry returned by `llm_provider_list_models`. */
+export interface RemoteModelInfo {
+  id: string
+  display_name: string | null
+  context_window: number | null
+  kind: string | null
 }
 
 export interface LlmModelInput {
@@ -179,6 +187,9 @@ export const llmApi = {
   // Models
   listModels: (token: string, provider_id?: string) =>
     call<LlmModel[]>('llm_models_list', { token, providerId: provider_id ?? null }),
+  /** v0.7.1 — fetch the provider's published model catalog (OpenAI/Anthropic/Google). */
+  listProviderModels: (token: string, providerId: string) =>
+    call<RemoteModelInfo[]>('llm_provider_list_models', { token, providerId }),
   getModel: (token: string, id: string) => call<LlmModel>('llm_models_get', { token, id }),
   createModel: (token: string, payload: LlmModelInput) =>
     call<LlmModel>('llm_models_create', { token, payload }),

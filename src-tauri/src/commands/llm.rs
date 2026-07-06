@@ -1,10 +1,10 @@
-//! LLM commands — provider + model CRUD, chat (sync + stream), usage query.
+﻿//! LLM commands 鈥?provider + model CRUD, chat (sync + stream), usage query.
 //!
 //! `decide_route()` picks the right provider/model for a chat call:
-//!   1. explicit provider_id/model_id → use as-is
-//!   2. no provider + fallback ready + enabled → use local fallback
-//!   3. no provider + cloud configured → use user default
-//!   4. otherwise → error
+//!   1. explicit provider_id/model_id 鈫?use as-is
+//!   2. no provider + fallback ready + enabled 鈫?use local fallback
+//!   3. no provider + cloud configured 鈫?use user default
+//!   4. otherwise 鈫?error
 //!
 //! All commands emit metrics via the v0.5.7 MetricsRegistry (one line per
 //! command) and go through `require_permission` for authz.
@@ -146,7 +146,7 @@ fn row_to_provider(row: &rusqlite::Row<'_>) -> rusqlite::Result<Provider> {
         base_url: row.get("base_url")?,
         auth_type: row.get("auth_type")?,
         auth_header: row.get("auth_header")?,
-        // Never return the API key — the frontend only ever writes it.
+        // Never return the API key 鈥?the frontend only ever writes it.
         api_key: None,
         settings_json: row.get("settings_json")?,
         default_model_id: row.get("default_model_id")?,
@@ -516,6 +516,93 @@ pub fn llm_models_delete(
         .map_err(|e| AppError::Internal(e.to_string()))
 }
 
+/// v0.7.1 鈥?Discover the provider's published model catalog.
+///
+/// Looks up the provider row, picks the adapter that matches its `kind`,
+/// and calls `LlmProvider::list_models`. Returns the list verbatim 鈥?the
+/// frontend (LlmModels.vue) lets the user tick which ones to insert.
+#[tauri::command]
+pub async fn llm_provider_list_models(
+    state: State<'_, AppState>,
+    token: String,
+    provider_id: String,
+) -> Result<Vec<crate::llm::ProviderModelInfo>, AppError> {
+    let _t = m::time(&state.metrics, "llm_provider_list_models");
+    let _user = require_perm(&state, &token, "llm:manage")?;
+
+    let ctx = build_provider_context_for_discovery(&state, &provider_id)?;
+    let kind_str = crate::llm::provider_kind_for_id_static(&state, &provider_id)?;
+    let adapter: Box<dyn crate::llm::LlmProvider> = match kind_str.as_str() {
+        "openai_compat" => Box::new(crate::llm::providers::openai_compat::OpenAiCompat),
+        "anthropic" => Box::new(crate::llm::providers::anthropic::Anthropic),
+        "google" => Box::new(crate::llm::providers::google::Google),
+        other => {
+            return Err(AppError::Validation(format!(
+                "provider kind '{other}' has no model discovery"
+            )))
+        }
+    };
+    if !adapter.supports_list_models() {
+        return Err(AppError::Validation(format!(
+            "provider kind '{}' does not support model discovery",
+            adapter.kind()
+        )));
+    }
+    adapter.list_models(&ctx).await.map_err(map_llm_error)
+}
+
+/// Build a `ProviderContext` for the given provider. Mirrors what
+/// `resolve()` does, but skips the model-row lookup since the discovery
+/// path doesn't need one.
+fn build_provider_context_for_discovery(
+    state: &State<AppState>,
+    provider_id: &str,
+) -> Result<crate::llm::ProviderContext, AppError> {
+    let (base_url, auth_type, auth_header, api_key_enc, settings_json): (
+        String,
+        String,
+        Option<String>,
+        Option<Vec<u8>>,
+        String,
+    ) = state
+        .db
+        .with_conn(|c| {
+            c.query_row(
+                "SELECT base_url, auth_type, auth_header, api_key_enc, settings_json
+                 FROM llm_providers WHERE id = ?1",
+                [provider_id],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, Option<Vec<u8>>>(3)?,
+                        r.get::<_, String>(4)?,
+                    ))
+                },
+            )
+            .map_err(AppError::from)
+        })
+        .map_err(|e| AppError::Internal(format!("provider not found: {e}")))?;
+    let timeout_ms: u64 = serde_json::from_str::<serde_json::Value>(&settings_json)
+        .ok()
+        .and_then(|v| v.get("timeout_ms").and_then(|t| t.as_u64()))
+        .unwrap_or(60_000);
+    let api_key = match crate::llm::decrypt_api_key(api_key_enc.as_deref(), &state.master_key) {
+        Ok(s) => s,
+        Err(e) => return Err(AppError::Internal(format!("api_key decrypt: {e}"))),
+    };
+    Ok(crate::llm::ProviderContext {
+        provider_id: provider_id.to_string(),
+        base_url,
+        auth_type,
+        auth_header,
+        api_key,
+        timeout_ms,
+        http: crate::llm::http_client(timeout_ms),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Chat
 // ---------------------------------------------------------------------------
@@ -552,7 +639,7 @@ pub async fn llm_chat(
     let _user = require_perm(&state, &token, "llm:use")?;
     let request_id = uuid::Uuid::new_v4().to_string();
     let started = std::time::Instant::now();
-    // v0.6.2 — local-first routing. If `ai.local_first=true` and the
+    // v0.6.2 鈥?local-first routing. If `ai.local_first=true` and the
     // fallback engine is Ready + has a provider row, rewrite to it.
     let mut provider_id = args.provider_id.clone();
     let mut model_id = args.model_id.clone();
@@ -610,7 +697,7 @@ pub async fn llm_chat_stream(
     let _user = require_perm(&state, &token, "llm:use")?;
     let request_id = uuid::Uuid::new_v4().to_string();
     let started = std::time::Instant::now();
-    // v0.6.2 — local-first routing (see llm_chat).
+    // v0.6.2 鈥?local-first routing (see llm_chat).
     let mut provider_id = args.provider_id.clone();
     let mut model_id = args.model_id.clone();
     crate::commands::llm_fallback::maybe_reroute_to_local(

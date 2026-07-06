@@ -494,8 +494,8 @@ mod tests {
         // We seeded V1..V11 — assert the count is at least 11 so a typo in V9/V10/V11
         // can't silently pass CI either.
         assert!(
-            applied.len() >= 12,
-            "expected at least 12 migrations applied, got {}",
+            applied.len() >= 13,
+            "expected at least 13 migrations applied, got {}",
             applied.len()
         );
         // Spot-check: app_state and the new menus rows from V7 exist.

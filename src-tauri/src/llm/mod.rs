@@ -84,9 +84,39 @@ pub enum LlmError {
     Internal(String),
 }
 
+/// One remote model entry returned by `LlmProvider::list_models`.
+///
+/// `display_name` and `context_window` are best-effort — some providers
+/// don't expose them, in which case the field is `None`.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ProviderModelInfo {
+    pub id: String,
+    pub display_name: Option<String>,
+    pub context_window: Option<u32>,
+    /// Family hint ("chat", "embeddings", "image"...) when provider exposes it.
+    pub kind: Option<String>,
+}
+
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
     fn kind(&self) -> &'static str;
+
+    /// Whether this provider exposes a "list available models" endpoint
+    /// we know how to call. Default `false` for adapters we don't have a
+    /// probe for (custom, fallback, etc).
+    fn supports_list_models(&self) -> bool { false }
+
+    /// Optional: fetch the provider's published model catalog.
+    /// Default: `Err(Unsupported)` — caller falls back to manual entry.
+    async fn list_models(
+        &self,
+        _ctx: &ProviderContext,
+    ) -> Result<Vec<ProviderModelInfo>, LlmError> {
+        Err(LlmError::Unsupported(
+            "this provider does not expose model discovery".into(),
+        ))
+    }
+
     async fn chat(
         &self,
         ctx: &ProviderContext,
@@ -121,4 +151,22 @@ pub fn http_client(timeout_ms: u64) -> reqwest::Client {
         .timeout(std::time::Duration::from_millis(timeout_ms))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+/// Lookup a provider's `kind` from the DB by id. Used by discovery
+/// commands so the right adapter gets selected.
+pub fn provider_kind_for_id_static(
+    state: &crate::AppState,
+    provider_id: &str,
+) -> Result<String, crate::error::AppError> {
+    state
+        .db
+        .with_conn(|c| {
+            c.query_row(
+                "SELECT kind FROM llm_providers WHERE id = ?1",
+                [provider_id],
+                |r| r.get::<_, String>(0),
+            )
+            .map_err(crate::error::AppError::from)
+        })
 }

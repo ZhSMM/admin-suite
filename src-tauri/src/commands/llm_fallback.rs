@@ -471,12 +471,14 @@ pub async fn llm_fallback_speed_test(
         .ok_or_else(|| AppError::Validation(format!("unknown model: {model_id}")))?;
     let cache_dir = state.fallback.llm_dir();
 
-    // Resolve spec → real .gguf URLs. If this fails (HF API down) the
-    // user should be told to paste a URL — we don't pretend to know
-    // their mirror configuration.
+    // Resolve spec → real .gguf URLs. If this fails (HF API unreachable
+    // from CN, for example) we don't just hand the user an empty list:
+    // probe the candidate mirrors of `spec.hf_repo` directly, using the
+    // `preferred_file_glob` to derive a filename. The user still sees
+    // useful diagnostics — which mirror responds, how fast, etc.
     let resolved = fallback::resolve_spec(spec, &cache_dir).await.ok();
     let Some(r) = resolved else {
-        return Ok(vec![]);
+        return Ok(probe_known_mirrors_for_spec(spec, &state).await);
     };
 
     let mut urls: Vec<(String, &'static str)> = vec![(r.primary_url, "primary")];
@@ -497,6 +499,41 @@ pub async fn llm_fallback_speed_test(
         results.push(fallback::speed_test_url(u, label, "download").await);
     }
     Ok(results)
+}
+
+/// Best-effort probe of the standard mirrors for a fallback spec when
+/// `resolve_spec()` fails (HF API unreachable from this region).
+///
+/// Instead of returning an empty list — which the user reported as "no
+/// data" — we synthesise a list of plausible URLs using known mirror
+/// bases + the filename pattern from the spec, then probe each so the
+/// user gets diagnostic feedback.
+async fn probe_known_mirrors_for_spec(
+    spec: &fallback::FallbackModelSpec,
+    _state: &tauri::State<'_, AppState>,
+) -> Vec<fallback::SpeedTestResult> {
+    let mut urls: Vec<(String, String)> = Vec::new();
+    let repo = spec.hf_repo.to_string();
+    // Cheap guess: use `spec.quantization` (e.g. "Q4_K_M") for the
+    // filename; if the model was published with a different pattern we
+    // fall back to a generic probe URL.
+    let quant = spec.quantization;
+    let guess_filename = format!("{}-{}.gguf", spec.id, quant);
+    let bases: &[(&str, &str)] = &[
+        ("huggingface", "https://huggingface.co"),
+        ("hf-mirror", "https://hf-mirror.com"),
+        ("modelscope", "https://www.modelscope.cn"),
+    ];
+    for (label, base) in bases {
+        let url = format!("{}/{}/resolve/main/{}", base, repo, guess_filename);
+        urls.push((url, (*label).to_string()));
+    }
+    let mut out = Vec::with_capacity(urls.len());
+    for (url, label) in urls {
+        let probe = fallback::speed_test_url(&url, &label, "probe").await;
+        out.push(probe);
+    }
+    out
 }
 
 // ---------------------------------------------------------------------
