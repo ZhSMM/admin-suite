@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod auth;
 pub mod backup;
+pub mod chat_history;
 pub mod crash;
 pub mod llm;
 pub mod llm_fallback;

@@ -23,6 +23,7 @@ use crate::auth::session::SessionStore;
 use crate::commands::auth as auth_cmd;
 use crate::commands::audit as audit_cmd;
 use crate::commands::backup as backup_cmd;
+use crate::commands::chat_history as chat_history_cmd;
 use crate::commands::crash::{self as crash_cmd, CrashStore};
 use crate::commands::llm::{self as llm_cmd};
 use crate::commands::llm_fallback;
@@ -775,6 +776,16 @@ pub fn run() {
             llm_fallback::llm_fallback_discover_trending,
             llm_fallback::llm_fallback_speed_test,
             llm_fallback::llm_fallback_import_local,
+            // v0.7.0 — persistent multi-level chat history
+            chat_history_cmd::chat_session_list,
+            chat_history_cmd::chat_session_create,
+            chat_history_cmd::chat_session_update,
+            chat_history_cmd::chat_session_delete,
+            chat_history_cmd::chat_session_get,
+            chat_history_cmd::chat_message_append,
+            chat_history_cmd::chat_message_update,
+            chat_history_cmd::chat_message_delete,
+            chat_history_cmd::chat_session_export,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
