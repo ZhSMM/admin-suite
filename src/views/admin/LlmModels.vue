@@ -38,6 +38,41 @@
     </el-alert>
 
     <el-table :data="filteredModels" stripe size="small" empty-text="-">
+      <el-table-column prop="code" label="Code" width="200">
+        <template #default="{ row }"><code>{{ row.code }}</code></template>
+      </el-table-column>
+      <el-table-column prop="display_name" :label="t('llm.models.col.name')" min-width="180" />
+      <el-table-column :label="t('llm.models.col.provider')" width="180">
+        <template #default="{ row }">
+          <span>{{ providerName(row.provider_id) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('llm.models.col.context')" width="100" align="right">
+        <template #default="{ row }">{{ row.context_window }}</template>
+      </el-table-column>
+      <el-table-column :label="t('llm.models.col.maxOutput')" width="100" align="right">
+        <template #default="{ row }">{{ row.max_output }}</template>
+      </el-table-column>
+      <el-table-column :label="t('llm.models.col.caps')" min-width="160">
+        <template #default="{ row }">
+          <el-tag v-for="c in caps(row.capabilities)" :key="c" size="small" style="margin-right: 4px">
+            {{ c }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('llm.models.col.enabled')" width="80">
+        <template #default="{ row }">
+          <el-tag v-if="row.enabled" type="success" size="small">ON</el-tag>
+          <el-tag v-else type="info" size="small">OFF</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column width="160" align="right">
+        <template #default="{ row }">
+          <el-button size="small" text @click="openEdit(row)">{{ t('common.edit') }}</el-button>
+          <el-button size="small" text type="danger" @click="onDelete(row)">{{ t('common.delete') }}</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
 
     <el-dialog
       v-model="dialog.visible"
