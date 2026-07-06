@@ -23,9 +23,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 pub mod download;
+pub mod multi_download;
 pub mod registry;
 
 pub use download::{DownloadError, DownloadHandle, DownloadProgress};
+pub use multi_download as multi;
 pub use registry::{
     discover_trending, find_spec, resolve_repo, resolve_spec, resolve_spec_with_speedtest,
     resolve_spec_with_preferred, FallbackModelSpec, ResolvedModel, ResolutionCache,
@@ -327,6 +329,16 @@ impl FallbackManager {
         } else {
             false
         }
+    }
+
+    /// Borrow the cancel flag for the in-flight download (if any). Used
+    /// by `multi_download::download` which needs to share the flag with
+    /// N workers it spawns.
+    pub fn cancel_flag(&self) -> Arc<AtomicBool> {
+        let g = self.inner.lock().unwrap();
+        g.download_cancel
+            .clone()
+            .unwrap_or_else(|| Arc::new(AtomicBool::new(false)))
     }
 
     /// True iff a download is currently in flight.

@@ -626,5 +626,53 @@ rand = "0.8"    # 已有
 
 ---
 
-> 评审签字：__________  
+## 17. v0.7.x 增量（叠加在本文档之上）
+
+- **v0.7.0 — 多级会话**
+  - `chat_sessions` + `chat_messages(parent_id)` 把 Chat 升级到 DAG；
+    同一 `parent_id` 多条 = 分支。
+  - 活动路径 = 根→当前叶，是喂给 LLM 的 ctx。
+  - 9 条命令（list / create / update / delete / get / append /
+    update / delete / export），走 `llm:use` 权限。
+  - 三种导出格式：JSON（整树）/ Markdown（活动路径扁平）/
+    HTML（自包含）。
+  - 设计稿：`docs/plans/v0.7.0-chat-history.md`。
+  - 关键修复：删 vite 编译崩的模板遗留（v0.7.2 → v0.7.3）。
+
+- **v0.7.1 — 供应商模型拉取 + 权限修正**
+  - `LlmProvider::list_models()` trait 默认返回 `Err(Unsupported)`，
+    OpenAI / Anthropic / Google 各实现一份：
+    - OpenAI：`GET /models`（覆盖 OpenAI / Ollama / vLLM / DeepSeek /
+      OpenRouter / Zhipu / Moonshot / DashScope OpenAI mode）
+    - Anthropic：`GET /v1/models?limit=100`，必须带 `anthropic-version`
+    - Google：`GET /v1beta/models?pageSize=100`，过滤出
+      `supported_generation_methods: ['generateContent']`
+  - 新命令 `llm_provider_list_models(token, providerId)` 走
+    `llm:manage`。
+  - LlmModels.vue 加「拉取模型」按钮 + 多选对话框。
+  - V13 migration：`r_admin` 补 `llm:use / llm:manage / llm:usage:read /
+    llm:budget:manage` 四个权限——之前 admin 用户下拉永远是空的。
+  - Chat.vue 加 `onActivated`，返回 chat 页时 reload providers/models。
+  - `LlmModel.id` TS 类型改回 `string`（DB 列是 TEXT，typed 错误导致
+    5 个无关 TS 报错）。
+  - `lifecycle::probe_known_mirrors_for_spec`：HF 在 CN 不可达时
+    自动 probe `hf-mirror / modelscope` 三个 base，用户至少
+    看到诊断数据。
+
+- **v0.7.2 — 测速实时显示**
+  - `llm_fallback_speed_test` 改为返回 `Ok(())` + 后台 tokio task，
+    每个 URL 完成立刻 emit `llm:fallback:speed-test` 事件。
+  - 事件三态：`started` → `result{index}` → `done`。
+  - 前端 store：`speedTestRows[] / speedTestTotal / speedTestInFlight`。
+  - UI：探测中行 spinning 图标 + 「正在测试…」标签 +
+    速度/URL 列显示 `…`；探测完成行才允许「复制 / 用此下载」。
+  - 「不要一直转」，**每个 mirror 一测完一行就刷出来**。
+
+- **v0.7.3 — 构建流程修复 + release 流程去自动化**
+  - v0.7.2 的 `el-table` 漏了 `</el-table>`，CI vite 编译暴毙
+    `Element is missing end tag`。vue-tsc 没抓到（解析器宽松）但
+    vite 不放过。
+  - Release workflow 改为只 `workflow_dispatch` 触发——commit 不再
+    自动 release。详细见 `docs/release-process.md`。
+
 > 进入开发：__________

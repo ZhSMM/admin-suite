@@ -766,16 +766,20 @@ pub fn run() {
             llm_cmd::llm_fallback_set_enabled,
             llm_cmd::llm_fallback_dismiss_startup_prompt,
             llm_cmd::llm_fallback_startup_prompt_needed,
-            // LLM v0.6.2 — one-click local install
-            llm_fallback::llm_fallback_install_start,
-            llm_fallback::llm_fallback_install_cancel,
-            llm_fallback::llm_fallback_server_start,
-            llm_fallback::llm_fallback_server_stop,
-            llm_fallback::llm_fallback_remove,
-            llm_fallback::llm_fallback_disk_free,
-            llm_fallback::llm_fallback_discover_trending,
-            llm_fallback::llm_fallback_speed_test,
-            llm_fallback::llm_fallback_import_local,
+            // LLM v0.6.2 — one-click local install (commands live in
+            // commands/llm_fallback/{install, server, speed_test}.rs).
+            // Tauri's generate_handler! macro resolves `name` to
+            // `__cmd__name` inside the same module, so pin the
+            // submodule path explicitly.
+            llm_fallback::install::llm_fallback_install_start,
+            llm_fallback::install::llm_fallback_install_cancel,
+            llm_fallback::server::llm_fallback_server_start,
+            llm_fallback::server::llm_fallback_server_stop,
+            llm_fallback::server::llm_fallback_remove,
+            llm_fallback::server::llm_fallback_disk_free,
+            llm_fallback::server::llm_fallback_discover_trending,
+            llm_fallback::speed_test::llm_fallback_speed_test,
+            llm_fallback::server::llm_fallback_import_local,
             // v0.7.0 — persistent multi-level chat history
             chat_history_cmd::chat_session_list,
             chat_history_cmd::chat_session_create,

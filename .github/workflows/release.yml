@@ -1,28 +1,30 @@
 name: Release
 
-# Trigger:
-#   - Push of a v* tag  → creates a non-draft GitHub Release with NSIS installer
-#   - workflow_dispatch  → uploads build artifacts only (no release)
+# v0.7.3+: This workflow is **manual-only** — pushes to `main` no longer
+# publish releases. An intentional commit =/=> a release; that choice
+# is now made explicitly via the Actions tab ("Run workflow") or
+# `gh workflow run release.yml`.
 #
-# Build targets NSIS only. We previously produced MSI via WiX, but Tauri's
-# WiX download from github.com/wixtoolset has been hitting intermittent
-# network errors on GitHub-hosted runners. NSIS produces a single .exe
-# installer that covers both per-user and system-wide installs (it
-# prompts for elevation when needed). We can revisit MSI once Tauri's
-# WiX download path is more reliable.
+# The previous behaviour (`on: push: tags: 'v*'`) coupled every release
+# to every commit, which burned Actions minutes on partial fixes and
+# produced visible-but-broken release pages whenever the build picked
+# up a typo before it was reverted (e.g. v0.7.2's missing </el-table>).
+#
+# To cut a release:
+#   1. Bump src-tauri/tauri.conf.json's `version`.
+#   2. Push that commit (and any other commits you want included) to main.
+#   3. Either click "Run workflow" in the Actions tab OR run:
+#        gh workflow run release.yml --ref main
+#
+# This is also where you'd want to wire it back to tag-pushes once you've
+# stabilised the project — just add the `push: tags` block back.
+#
+# Build targets NSIS only. NSIS produces a single .exe that covers both
+# per-user and system-wide installs (it prompts for elevation when
+# needed).
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
-
-# Cancel superseded runs: when a new tag is pushed while a previous build
-# for the same tag (or a tag with the same matrix) is still running, kill
-# the old one. Saves minutes per failed retry.
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref_type == 'tag' }}
 
 permissions:
   contents: write   # required so tauri-action can create the GitHub Release
