@@ -60,19 +60,48 @@ The single Windows job produces:
 | File                              | Use                                      |
 |-----------------------------------|------------------------------------------|
 | `Admin.Suite_X.Y.Z_x64-setup.exe` | NSIS installer. Always attached.        |
+| `Admin.Suite_X.Y.Z_x64_en-US.msi` | MSI installer. Always attached (preferred for Group Policy / corporate deploys). |
 | `Admin.Suite_X.Y.Z_x64-setup.exe.sig` | Tauri-updater signature. Only when `TAURI_SIGNING_PRIVATE_KEY` is configured. |
 | `*.nsis.zip`                     | Tauri-updater bundle. Same condition.    |
 | `latest.json`                     | Tauri-updater manifest. Same condition. |
 
 Until you add `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
-to repo Secrets, only the bare `.exe` ships. The in-app updater will
-show "no update available" until then — expected, not a bug.
+to repo Secrets, only the bare `.exe` / `.msi` ships. The in-app updater
+will show "no update available" until then — expected, not a bug.
 
 ## Working without `gh` CLI
 
 If `gh` is not on PATH, the workflow also accepts
 `workflow_dispatch` from the Actions tab (Actions → Release →
-"Run workflow" → choose branch → Run).
+"Run workflow" → choose branch + inputs → Run).
+
+## Rebuilding an existing release
+
+The workflow now exposes two `workflow_dispatch` inputs:
+
+| Input           | Default | Effect                                                               |
+|-----------------|---------|----------------------------------------------------------------------|
+| `version`       | *(empty)* | Override the tag name. Pass `v0.7.4` to attach this build to that tag. |
+| `create_release`| `true`  | When `false`, the workflow only builds and uploads artifacts — no GitHub Release is created or overwritten. Use for a clean rebuild without polluting the existing release page. |
+
+Typical rebuild recipe:
+
+```bash
+# 1. (Optional) re-trigger on a fresh runner — no code changes needed
+gh workflow run release.yml --ref main \
+  -f version=v0.7.4 \
+  -f create_release=false
+```
+
+Then download the bundles from the Actions run page (Artifacts →
+`admin-suite-windows`). When you're happy with them, do a final
+`create_release=true` run to actually publish.
+
+## v0.7.4 changes to this workflow
+
+- Added `workflow_dispatch` inputs (`version`, `create_release`) so
+  the same workflow can rebuild without re-tagging.
+- `tauri.conf.json` bundles now include both `nsis` and `msi`.
 
 ## Self-elevating checklist
 

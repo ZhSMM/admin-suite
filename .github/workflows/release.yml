@@ -16,15 +16,33 @@ name: Release
 #   3. Either click "Run workflow" in the Actions tab OR run:
 #        gh workflow run release.yml --ref main
 #
+# To **rebuild** an existing release without changing the version
+# (e.g. after fixing a flaky build, or re-running on a clean runner),
+# pass `version: vX.Y.Z` and leave `create_release: false` — the
+# run will just upload artifacts you can download from the Actions
+# page without overwriting the GitHub Release.
+#
 # This is also where you'd want to wire it back to tag-pushes once you've
 # stabilised the project — just add the `push: tags` block back.
 #
-# Build targets NSIS only. NSIS produces a single .exe that covers both
-# per-user and system-wide installs (it prompts for elevation when
-# needed).
+# Build targets both NSIS and MSI:
+#   - NSIS (.exe) — preferred for portable / per-user install
+#   - MSI (.msi)   — preferred for Group Policy / corporate deploys
+# Both come out of the same `npm run tauri build` invocation.
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag name to attach this build to (e.g. v0.7.4). Leave blank to use the version in tauri.conf.json. Used as `tagName` for tauri-action.'
+        required: false
+        type: string
+        default: ''
+      create_release:
+        description: 'Publish a GitHub Release and upload assets. Set to false to only collect artifacts (use for rebuilds).'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write   # required so tauri-action can create the GitHub Release
@@ -91,10 +109,14 @@ jobs:
 
       # -----------------------------------------------------------------------------
       # tauri-apps/tauri-action@v0 wraps:
-      #   1. `npm run tauri build` — bundles the NSIS .exe
+      #   1. `npm run tauri build` — bundles NSIS .exe + MSI .msi (targets set in
+      #      tauri.conf.json)
       #   2. Signs the .exe if TAURI_SIGNING_PRIVATE_KEY is set
-      #   3. Creates the GitHub Release (only on tag push)
-      #   4. Uploads the .exe + signed .nsis.zip + latest.json as release assets
+      #   3. Creates the GitHub Release when `inputs.create_release == true`
+      #      (defaults to true; pass `false` for a rebuild-only run that
+      #      only collects artifacts)
+      #   4. Uploads the installers + signed .nsis.zip + latest.json as
+      #      release assets
       #
       # `tauriUpdaterActive: ${{ secrets.X != '' }}` evaluates to false when
       # the secret is missing, so we ship installers without a signed
@@ -109,13 +131,14 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number) }}
-          releaseName: 'Admin Suite ${{ github.ref_name }}'
+          tagName: ${{ inputs.version != '' && inputs.version || (github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number)) }}
+          releaseName: 'Admin Suite ${{ inputs.version != '' && inputs.version || github.ref_name }}'
           releaseBody: |
             Automated build via GitHub Actions.
 
             ## What's inside
             - **NSIS installer (.exe)** — preferred for portable / per-user install
+            - **MSI installer (.msi)** — preferred for Group Policy / corporate deploys
             - **Auto-update** — in-app updater will detect this release via `latest.json`
               (only when `TAURI_SIGNING_PRIVATE_KEY` repo secret is configured)
 
@@ -127,6 +150,11 @@ jobs:
           releaseDraft: false
           prerelease: false
           tauriUpdaterActive: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          # Skip creating the GitHub Release when the operator only wants
+          # an artifact run (e.g. a manual rebuild of an existing tag).
+          # `createsRelease: false` makes tauri-action build + upload
+          # artifacts without pushing a Release.
+          createsRelease: ${{ inputs.create_release }}
           args: ''
 
       # -----------------------------------------------------------------------------
@@ -151,6 +179,9 @@ jobs:
       # Manual workflow_dispatch: tauri-action has nothing to attach to (no
       # tag), so upload the artifacts for inspection. On tag pushes this step
       # is skipped — tauri-action handles uploads to the Release.
+      #
+      # Both NSIS and MSI bundles are uploaded. The `latest.json` next to
+      # them is the signed manifest consumed by the in-app updater.
       # -----------------------------------------------------------------------------
       - name: Upload artifacts (manual run only)
         if: github.ref_type != 'tag'
@@ -160,6 +191,7 @@ jobs:
           path: |
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.nsis.zip
+            src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
             src-tauri/target/x86_64-pc-windows-msvc/release/bundle/latest.json
           if-no-files-found: warn
           retention-days: 14

@@ -45,4 +45,4 @@ pub use server::{
     llm_fallback_disk_free, llm_fallback_discover_trending, llm_fallback_import_local,
     llm_fallback_remove, llm_fallback_server_start, llm_fallback_server_stop,
 };
-pub use speed_test::llm_fallback_speed_test;
+pub use speed_test::{llm_fallback_speed_test, llm_fallback_speed_test_cancel};

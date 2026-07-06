@@ -729,6 +729,8 @@ export default {
   'settings.ai.fallback.speedProbePrimary': '主镜像',
   'settings.ai.fallback.speedProbeMirrorA': '镜像 1',
   'settings.ai.fallback.speedProbeMirrorB': '镜像 2',
+  // v0.7.4
+  'settings.ai.fallback.stopTest': '停止测试',
   'settings.ai.fallback.importLocal': '导入本地文件…',
   'settings.ai.fallback.importSuccess': '模型导入成功。',
 

@@ -709,6 +709,8 @@ export default {
   'settings.ai.fallback.speedProbePrimary': 'Primary',
   'settings.ai.fallback.speedProbeMirrorA': 'Mirror 1',
   'settings.ai.fallback.speedProbeMirrorB': 'Mirror 2',
+  // v0.7.4
+  'settings.ai.fallback.stopTest': 'Stop test',
   'settings.ai.fallback.importLocal': 'Import local file…',
   'settings.ai.fallback.importSuccess': 'Model imported successfully.',
 

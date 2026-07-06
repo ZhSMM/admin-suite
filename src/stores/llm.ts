@@ -170,10 +170,20 @@ export const useLlmStore = defineStore('llm', {
           this.installCurrentStage = e.payload.stage
         }
       )
-      const unlistenDone = await listen<{ model_id: string; success: boolean; error: string }>(
+      // v0.7.4: Rust DonePayload serialises as camelCase (`modelId`),
+      // so read `modelId` first and fall back to the legacy
+      // `model_id` shape so an old frontend never deadlocks on the
+      // done event.
+      const unlistenDone = await listen<{
+        modelId?: string
+        model_id?: string
+        success: boolean
+        error: string
+      }>(
         'llm:fallback:done',
         async (e) => {
-          if (e.payload.model_id !== target) return
+          const mid = e.payload.modelId ?? e.payload.model_id
+          if (mid !== target) return
           this.installInFlight = false
           // Always wipe the in-flight UI state so the panel doesn't get
           // stuck showing "Downloading 0%" after the install finishes.
@@ -288,17 +298,23 @@ export const useLlmStore = defineStore('llm', {
         modelId: string
         index: number
         total: number
+        /** v0.7.4 — (url, label, kind) sent on `started` so the FE
+         *  has URLs to show + actions to enable before the first
+         *  probe completes. */
+        queue?: { url: string; label: string; kind: string }[]
         result?: import('@/api/llm').SpeedTestResult
         error?: string
       }>('llm:fallback:speed-test', (e) => {
         const p = e.payload
         if (p.kind === 'started') {
+          const queue = Array.isArray(p.queue) ? p.queue : []
           const rows: import('@/api/llm').SpeedTestResult[] = []
           for (let i = 0; i < p.total; i++) {
+            const pre = queue[i]
             rows.push({
-              url: '',
-              label: '',
-              kind: 'download',
+              url: pre?.url ?? '',
+              label: pre?.label ?? '',
+              kind: (pre?.kind as 'download' | 'probe') ?? 'download',
               reachable: false,
               bytesDownloaded: 0,
               elapsedMs: 0,
@@ -325,7 +341,7 @@ export const useLlmStore = defineStore('llm', {
           this.speedTestRows = next
           return
         }
-        if (p.kind === 'done') {
+        if (p.kind === 'cancelled' || p.kind === 'done') {
           this.speedTestInFlight = false
           // Strip probing flags so the table settles.
           this.speedTestRows = this.speedTestRows.map((r: any) => ({ ...r, probing: false }))
@@ -351,6 +367,14 @@ export const useLlmStore = defineStore('llm', {
       } catch (e) {
         ElMessage.error(e instanceof Error ? e.message : String(e))
         return []
+      }
+    },
+    /** v0.7.4 — Cancel an in-flight mirror speed-test. */
+    async cancelSpeedTest(token: string): Promise<void> {
+      try {
+        await llmApi.fallbackSpeedTestCancel(token)
+      } catch (e) {
+        ElMessage.error(e instanceof Error ? e.message : String(e))
       }
     },
     async importLocal(token: string, modelId: string, sourcePath: string, expectedSha256?: string): Promise<number> {

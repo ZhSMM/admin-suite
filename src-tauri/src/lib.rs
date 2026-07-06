@@ -779,6 +779,7 @@ pub fn run() {
             llm_fallback::server::llm_fallback_disk_free,
             llm_fallback::server::llm_fallback_discover_trending,
             llm_fallback::speed_test::llm_fallback_speed_test,
+            llm_fallback::speed_test::llm_fallback_speed_test_cancel,
             llm_fallback::server::llm_fallback_import_local,
             // v0.7.0 — persistent multi-level chat history
             chat_history_cmd::chat_session_list,

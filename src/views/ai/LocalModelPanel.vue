@@ -107,6 +107,15 @@
           <el-button :icon="Connection" :loading="speedTesting" @click="runSpeedTest">
             {{ t('settings.ai.fallback.testSpeed') }}
           </el-button>
+          <el-button
+            v-if="speedTesting"
+            :icon="CircleClose"
+            type="danger"
+            plain
+            @click="onCancelSpeedTest"
+          >
+            {{ t('settings.ai.fallback.stopTest') }}
+          </el-button>
           <el-button :icon="FolderOpened" @click="onPickLocalFile">
             {{ t('settings.ai.fallback.importLocal') }}
           </el-button>
@@ -442,6 +451,13 @@ const speedTesting = computed(() => llm.speedTestInFlight)
 async function runSpeedTest() {
   if (!selectedModelId.value) return
   await llm.speedTest(auth.token || '', selectedModelId.value)
+}
+
+async function onCancelSpeedTest() {
+  await llm.cancelSpeedTest(auth.token || '')
+  // The backend emits a `cancelled` event when it observes the flag;
+  // the listener flips `speedTestInFlight = false` for us, so we
+  // don't have to do anything else here.
 }
 
 const manualInstallUrl = ref('')

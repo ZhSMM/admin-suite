@@ -239,10 +239,14 @@ export const llmApi = {
     call<void>('llm_fallback_remove', { token }),
   fallbackDiskFree: () => call<number>('llm_fallback_disk_free'),
   fallbackSpeedTest: (token: string, opts: { modelId?: string; manualUrl?: string }) =>
-    call<SpeedTestResult[]>(
-      'llm_fallback_speed_test',
-      { token, modelId: opts.modelId ?? null, manualUrl: opts.manualUrl ?? null }
-    ),
+    call<void>('llm_fallback_speed_test', {
+      token,
+      modelId: opts.modelId ?? null,
+      manualUrl: opts.manualUrl ?? null
+    }),
+  /** v0.7.4 — Cancel an in-flight mirror speed-test. */
+  fallbackSpeedTestCancel: (token: string) =>
+    call<boolean>('llm_fallback_speed_test_cancel', { token }),
   fallbackImportLocal: (token: string, modelId: string, sourcePath: string, expectedSha256?: string) =>
     call<number>('llm_fallback_import_local', {
       token,
