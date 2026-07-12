@@ -75,6 +75,22 @@ jobs:
         with:
           toolchain: stable
 
+      # v0.7.4: MSI bundling needs WiX 3.x. NSIS is bundled inside the
+      # `tauri-cli` crate, but `cargo-tauri` shells out to WiX for MSI
+      # and the GitHub-hosted `windows-latest` runner doesn't ship it.
+      # `wixtoolset` is the v3 chocolatey package — v4 changed the CLI
+      # surface and Tauri 1.x doesn't speak it yet.
+      - name: Install WiX Toolset 3 (for MSI bundle)
+        shell: pwsh
+        run: |
+          choco install wixtoolset --no-progress --limit-output --version=3.14.0
+          $candle = (Get-Command candle.exe -ErrorAction Stop).Source
+          $light  = (Get-Command light.exe  -ErrorAction Stop).Source
+          Write-Host "candle: $candle"
+          Write-Host "light:  $light"
+          candle.exe -? | Select-Object -First 1
+          light.exe  -? | Select-Object -First 1
+
       - name: Cache Rust build artefacts
         # Swatinem/rust-cache keys on src-tauri/Cargo.lock so dependency
         # changes invalidate. ~/.cargo/registry is shared across builds.
