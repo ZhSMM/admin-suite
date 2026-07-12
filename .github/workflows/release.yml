@@ -148,7 +148,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ inputs.version != '' && inputs.version || (github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number)) }}
-          releaseName: 'Admin Suite ${{ inputs.version != '' && inputs.version || github.ref_name }}'
+          releaseName: Admin Suite ${{ inputs.version != '' && inputs.version || github.ref_name }}
           releaseBody: |
             Automated build via GitHub Actions.
 
