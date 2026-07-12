@@ -76,17 +76,28 @@ jobs:
           toolchain: stable
 
       # v0.7.4: MSI bundling needs WiX 3.x. NSIS is bundled inside the
-      # `tauri-cli` crate, but `cargo-tauri` shells out to WiX for MSI
-      # and the GitHub-hosted `windows-latest` runner doesn't ship it.
-      # `wixtoolset` is the v3 chocolatey package — v4 changed the CLI
-      # surface and Tauri 1.x doesn't speak it yet.
+      # `tauri-cli` crate, but `cargo-tauri` shells out to WiX for MSI.
+      #
+      # The GitHub-hosted `windows-2025-vs2026` image already ships
+      # wixtoolset v3.14.1 in `C:\Program Files (x86)\WiX Toolset v3.14\bin\`,
+      # so on a modern runner the install is a no-op. We only run choco
+      # if `candle.exe` isn't already on PATH, and we don't pin a version
+      # (older runners ship older WiX, newer runners ship newer — pinning
+      # collides with either). `wixtoolset` is the v3 chocolatey package;
+      # v4 changed the CLI surface and Tauri 1.x doesn't speak it yet.
       - name: Install WiX Toolset 3 (for MSI bundle)
         shell: pwsh
         run: |
-          choco install wixtoolset --no-progress --limit-output --version=3.14.0
-          $candle = (Get-Command candle.exe -ErrorAction Stop).Source
-          $light  = (Get-Command light.exe  -ErrorAction Stop).Source
-          Write-Host "candle: $candle"
+          $candle = Get-Command candle.exe -ErrorAction SilentlyContinue
+          if ($candle) {
+            Write-Host "WiX already on PATH: $($candle.Source)" -ForegroundColor Green
+          } else {
+            Write-Host "candle.exe not on PATH — installing via chocolatey"
+            choco install wixtoolset --no-progress --limit-output
+            $candle = Get-Command candle.exe -ErrorAction Stop
+            Write-Host "Installed: $($candle.Source)" -ForegroundColor Green
+          }
+          $light = (Get-Command light.exe -ErrorAction Stop).Source
           Write-Host "light:  $light"
           candle.exe -? | Select-Object -First 1
           light.exe  -? | Select-Object -First 1
