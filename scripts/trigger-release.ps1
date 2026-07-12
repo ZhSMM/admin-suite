@@ -22,6 +22,9 @@
 #   .\trigger-release.ps1                                  # version from tauri.conf.json
 #   .\trigger-release.ps1 -Version v0.7.4                   # override tag
 #   .\trigger-release.ps1 -Version v0.7.4 -CreateRelease:$false   # rebuild only
+#
+# Can be invoked from the project root OR from the scripts/ subdir;
+# the script walks up to find tauri.conf.json either way.
 # -----------------------------------------------------------------------------
 [CmdletBinding()]
 param(
@@ -32,15 +35,41 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# --- Locate the project root (the dir that contains tauri.conf.json) ---------
+# The script lives in <root>/scripts/ but the user might also run it from
+# inside scripts/ via ".\trigger-release.ps1", so we walk up from both
+# $PSScriptRoot and $PWD and pick the first ancestor that has a
+# src-tauri/tauri.conf.json beside it. Works either way.
+function Find-ProjectRoot {
+    param([string]$Start)
+    $cur = (Resolve-Path $Start).Path
+    while ($true) {
+        $candidate = Join-Path $cur "src-tauri\tauri.conf.json"
+        if (Test-Path $candidate) { return $cur }
+        $parent = Split-Path $cur -Parent
+        if ($parent -eq $cur -or -not $parent) { return $null }
+        $cur = $parent
+    }
+}
+
+$ProjectRoot = $null
+foreach ($start in @($PSScriptRoot, $PWD)) {
+    if ($start) {
+        $found = Find-ProjectRoot -Start $start
+        if ($found) { $ProjectRoot = $found; break }
+    }
+}
+if (-not $ProjectRoot) {
+    throw "Could not locate src-tauri\tauri.conf.json from `$PSScriptRoot ($PSScriptRoot) or `$PWD ($PWD). Run from the project root, or pass -Version explicitly."
+}
+
 # --- Locate the version in tauri.conf.json when not given ---------------------
 if (-not $Version) {
-    $conf = Join-Path $PSScriptRoot "src-tauri\tauri.conf.json"
-    if (-not (Test-Path $conf)) {
-        throw "tauri.conf.json not found at $conf — pass -Version explicitly"
-    }
+    $conf = Join-Path $ProjectRoot "src-tauri\tauri.conf.json"
     $v = (Get-Content $conf -Raw | ConvertFrom-Json).package.version
     if (-not $v) { throw "Could not read package.version from $conf" }
     $Version = "v$($v.TrimStart('v'))"
+    Write-Host "→ Project root: $ProjectRoot" -ForegroundColor DarkGray
     Write-Host "→ Using version from tauri.conf.json: $Version" -ForegroundColor Cyan
 }
 
