@@ -71,9 +71,19 @@ will show "no update available" until then — expected, not a bug.
 
 ## Working without `gh` CLI
 
-If `gh` is not on PATH, the workflow also accepts
-`workflow_dispatch` from the Actions tab (Actions → Release →
-"Run workflow" → choose branch + inputs → Run).
+If `gh` is not on PATH, you have two options:
+
+1. **Click-through in the browser**: Actions → Release → "Run workflow"
+   → choose branch + inputs → Run.
+2. **`scripts/trigger-release.ps1`** — a one-shot PowerShell helper that
+   calls the GitHub REST API directly with a Personal Access Token.
+   Read the header comment for the one-time PAT setup; after that,
+   refreshes are a single command:
+   ```powershell
+   .\scripts\trigger-release.ps1                 # version from tauri.conf.json
+   .\scripts\trigger-release.ps1 -Version v0.7.5
+   .\scripts\trigger-release.ps1 -Version v0.7.5 -CreateRelease:$false   # rebuild only
+   ```
 
 ## Rebuilding an existing release
 
